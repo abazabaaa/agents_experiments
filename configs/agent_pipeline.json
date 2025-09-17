@@ -1,0 +1,75 @@
+{
+  "logging": {
+    "log_file": "logs/agent_pipeline.log",
+    "trace_workflow_name": "doc-cleaning-pipeline",
+    "trace_metadata": {
+      "project": "firecrawl-doc-cleaning"
+    }
+  },
+  "io": {
+    "input_artifact": "artifacts/lark_docs.json",
+    "output_directory": "artifacts/cleaned_docs"
+  },
+  "concurrency": {
+    "router_pool": 4,
+    "markdown_pool": 6,
+    "notebook_pool": 3,
+    "review_pool": 2,
+    "naming_pool": 2,
+    "channel_buffer": 20
+  },
+  "retry": {
+    "max_attempts": 3,
+    "initial_delay": 2.0,
+    "backoff_multiplier": 2.0,
+    "max_delay": 30.0,
+    "jitter_ratio": 0.5
+  },
+  "agents": {
+    "router": {
+      "name": "DocumentRouter",
+      "instructions": "Decide whether the provided document content represents a markdown guide or a Jupyter notebook. Reply with route=markdown if the document is standard markdown prose, or route=notebook if it is a Jupyter notebook (including JSON notebook exports). Explain briefly.",
+      "model": "gpt-5-nano",
+      "reasoning_effort": "minimal",
+      "verbosity": "low",
+      "timeout": 180.0,
+      "max_tokens": 4096
+    },
+    "markdown_cleaner": {
+      "name": "MarkdownPolisher",
+      "instructions": "You receive markdown content scraped from documentation. Clean it so it is well formatted markdown with consistent heading levels, fenced code blocks, intact tables, and informative front-matter. Preserve URLs. Remove duplicate navigation chrome. If review_feedback is provided, address it explicitly.",
+      "model": "gpt-5",
+      "reasoning_effort": "minimal",
+      "verbosity": "medium",
+      "timeout": 180.0,
+      "max_tokens": 50000
+    },
+    "notebook_refactor": {
+      "name": "NotebookRefactorer",
+      "instructions": "You transform Jupyter notebook JSON or markdown exports into a standalone Python script. Combine narrative into commented sections, keep code cells executable, and convert markdown explanations into leading comments. Ensure the script runs top-to-bottom. Address review_feedback if present.",
+      "model": "gpt-5",
+      "reasoning_effort": "high",
+      "verbosity": "medium",
+      "timeout": 180.0,
+      "max_tokens": 50000
+    },
+    "reviewer": {
+      "name": "QualityReviewer",
+      "instructions": "Review the transformed document to ensure it meets quality expectations. Approve only if the content is cleanly formatted, complete, and faithful to the source intent. Otherwise, reject with actionable feedback.",
+      "model": "gpt-5-mini",
+      "reasoning_effort": "medium",
+      "verbosity": "medium",
+      "timeout": 180.0,
+      "max_tokens": 4096
+    },
+    "namer": {
+      "name": "FileNamer",
+      "instructions": "Given the cleaned content and metadata, propose a concise file slug (kebab-case) and an appropriate extension ('.md' for markdown, '.py' for notebooks). Avoid spaces or special characters. Provide an optional descriptive title.",
+      "model": "gpt-5-nano",
+      "reasoning_effort": "minimal",
+      "verbosity": "low",
+      "timeout": 180.0,
+      "max_tokens": 4096
+    }
+  }
+}

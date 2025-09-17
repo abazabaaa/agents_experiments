@@ -1,0 +1,76 @@
+{
+  "logging": {
+    "log_file": "logs/agent_pipeline.log",
+    "trace_workflow_name": "lark-doc-cleaning-pipeline",
+    "trace_metadata": {
+      "project": "firecrawl-lark-doc-cleaning",
+      "version": "2.0-optimized"
+    }
+  },
+  "io": {
+    "input_artifact": "artifacts/lark_docs.json",
+    "output_directory": "artifacts/cleaned_docs"
+  },
+  "concurrency": {
+    "router_pool": 4,
+    "markdown_pool": 6,
+    "notebook_pool": 3,
+    "review_pool": 2,
+    "naming_pool": 2,
+    "channel_buffer": 20
+  },
+  "retry": {
+    "max_attempts": 3,
+    "initial_delay": 2.0,
+    "backoff_multiplier": 2.0,
+    "max_delay": 30.0,
+    "jitter_ratio": 0.5
+  },
+  "agents": {
+    "router": {
+      "name": "DocumentRouter",
+      "instructions": "TASK: Classify document as markdown OR notebook.\n\nDECISION TREE:\nCheck content structure:\n├── Contains ```python cells or {\"cells\": [ → route=notebook\n├── Contains .ipynb JSON structure → route=notebook\n├── Contains Jupyter magic commands (%%, !) → route=notebook\n├── Contains EBNF grammar rules (lowercase: pattern) → route=markdown\n├── Contains TERMINALS (UPPERCASE: /regex/) → route=markdown\n├── Contains Lark directives (%import, %ignore) → route=markdown\n└── Default markdown prose → route=markdown\n\nOUTPUT: route=markdown OR route=notebook\nKEEP EXPLANATION UNDER 10 WORDS.",
+      "model": "gpt-5-nano",
+      "reasoning_effort": "minimal",
+      "verbosity": "low",
+      "timeout": 180.0,
+      "max_tokens": 4096
+    },
+    "markdown_cleaner": {
+      "name": "MarkdownPolisher",
+      "instructions": "You are cleaning Lark parser documentation. Lark is a parsing library that uses EBNF grammar syntax.\n\nKEY LARK SYNTAX TO PRESERVE:\n- Grammar rules (lowercase): rule_name: expression | alternative\n- Terminals (UPPERCASE): TERM_NAME: \"literal\" | /regex/flags\n- Comments: // or # style\n- Operators: | + * ? ~ (preserve exactly)\n- Directives: %import, %ignore, %extend, %override\n- Templates: name{params}: expression\n- String literals and regex patterns must remain exact\n\nCLEANING TASKS:\n1. Format markdown with consistent heading levels (# ## ###)\n2. Preserve ALL code blocks with correct ```language tags\n3. Keep EBNF grammar blocks as ```ebnf or ```lark\n4. Maintain Python code blocks as ```python\n5. Fix broken tables while preserving technical content\n6. Add descriptive front-matter (title, description, source_url)\n7. Remove duplicate navigation but keep technical cross-references\n8. Ensure special characters in grammar (|, ?, *, +, ~) are properly escaped outside code blocks\n\nIMPORTANT: Lark grammars are precision syntax - even minor changes break parsers. Preserve ALL grammar examples exactly as written.\n\nIf review_feedback provided, address it specifically.",
+      "model": "gpt-5",
+      "reasoning_effort": "medium",
+      "verbosity": "medium",
+      "timeout": 180.0,
+      "max_tokens": 50000
+    },
+    "notebook_refactor": {
+      "name": "NotebookRefactorer",
+      "instructions": "Transform Jupyter notebook (JSON or markdown) containing Lark parser examples into a standalone Python script.\n\nLARK-SPECIFIC HANDLING:\n1. Preserve all Lark grammar definitions in triple-quoted strings\n2. Keep grammar syntax exact: rules, terminals, operators, directives\n3. Maintain Transformer and Visitor class structures\n4. Preserve @v_args decorators and their arguments\n5. Keep parse tree manipulation code intact\n6. Convert notebook cells to logical sections with clear comments\n\nSTRUCTURE:\n- Start with module docstring explaining the Lark example\n- Import statements (especially: from lark import Lark, Transformer, v_args)\n- Grammar definitions as module-level constants (use r''' for raw strings)\n- Transformer/Visitor classes with proper decorators\n- Main execution block with if __name__ == '__main__':\n- Convert markdown cells to section comments\n- Preserve all test cases and example inputs\n\nRESULT: Executable Python script demonstrating Lark parser functionality.\n\nIf review_feedback provided, implement those specific changes.",
+      "model": "gpt-5",
+      "reasoning_effort": "high",
+      "verbosity": "medium",
+      "timeout": 180.0,
+      "max_tokens": 50000
+    },
+    "reviewer": {
+      "name": "QualityReviewer",
+      "instructions": "REVIEW CHECKLIST - Lark Parser Documentation\n\nCONTEXT: You are reviewing DOCUMENTATION, not production code. Examples may reference other files.\n\nVALIDATION RULES:\n├── Grammar Syntax Check\n│   ├── Rules lowercase? (rule_name:)\n│   ├── Terminals UPPERCASE? (TERM_NAME:)\n│   ├── Operators preserved? (| + * ? ~)\n│   └── Comments intact? (// or #)\n├── Code Block Validation\n│   ├── Language tags present? (```python, ```ebnf, ```lark)\n│   ├── Indentation consistent?\n│   └── DO NOT REJECT for unresolvable imports - these are EXAMPLES\n├── Lark-Specific Elements\n│   ├── EBNF patterns exact?\n│   ├── Regex patterns unchanged? (/pattern/flags)\n│   ├── String literals preserved? (\"literal\" or 'literal')\n│   └── Directives formatted? (%import, %ignore)\n└── Document Quality\n    ├── Front-matter present?\n    ├── Headings hierarchical?\n    └── Code structure preserved?\n\nNEVER REJECT FOR:\n- Import statements referencing example files (_json_parser, etc)\n- Relative imports in examples\n- Code that requires external context\n- Grammar examples that look like broken markdown\n\nDECISION LOGIC:\napproved = ALL checks pass\nissues = List ONLY formatting/structure problems\nsuggestions = Actionable fixes only\n\nIMPORTANT: This is DOCUMENTATION of examples, not runnable code.",
+      "model": "gpt-5-mini",
+      "reasoning_effort": "medium",
+      "verbosity": "medium",
+      "timeout": 180.0,
+      "max_tokens": 4096
+    },
+    "namer": {
+      "name": "FileNamer",
+      "instructions": "NAMING RULES:\n\nEXTRACT KEY TERMS:\n├── Lark component? → Use: grammar, parser, transformer, visitor\n├── Example type? → Use: example, tutorial, reference\n├── Feature shown? → Use main feature name\n└── Default → Use first heading\n\nFORMAT:\n├── Slug: kebab-case, max 4 words\n├── Remove: 'the', 'a', 'an', common words\n├── Extension: .md for docs, .py for scripts\n└── Length: 5-40 characters\n\nEXAMPLES:\nlark-grammar-reference.md\ncalc-parser-example.py\njson-transformer.md\nearley-parser.py\n\nOUTPUT: Just slug and extension. NO explanation.",
+      "model": "gpt-5-nano",
+      "reasoning_effort": "minimal",
+      "verbosity": "low",
+      "timeout": 180.0,
+      "max_tokens": 4096
+    }
+  }
+}

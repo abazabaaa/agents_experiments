@@ -1,0 +1,77 @@
+---
+title: Handling Ambiguity with Lark (Earley, explicit ambiguity)
+description: Demonstrates how to obtain and visualize explicit ambiguity from Lark's Earley parser using a classic “fruit flies” sentence example.
+source_url: https://lark-parser.readthedocs.io/en/stable/_downloads/b0239cee17ba033b2ccfffe66491b86e/fruitflies.py
+language: python
+---
+
+# Handling Ambiguity
+
+A demonstration of ambiguity.
+
+This example shows how to get explicit ambiguity from Lark's Earley parser and how to visualize the resulting parse forest.
+
+## Code
+
+```python
+"""
+Handling Ambiguity
+==================
+
+A demonstration of ambiguity
+
+This example shows how to use get explicit ambiguity from Lark's Earley parser.
+
+"""
+import sys
+from lark import Lark, tree
+
+grammar = """
+    sentence: noun verb noun        -> simple
+            | noun verb "like" noun -> comparative
+
+    noun: adj? NOUN
+    verb: VERB
+    adj: ADJ
+
+    NOUN: "flies" | "bananas" | "fruit"
+    VERB: "like" | "flies"
+    ADJ: "fruit"
+
+    %import common.WS
+    %ignore WS
+"""
+
+parser = Lark(grammar, start='sentence', ambiguity='explicit')
+
+sentence = 'fruit flies like bananas'
+
+def make_png(filename):
+    tree.pydot__tree_to_png(parser.parse(sentence), filename)
+
+def make_dot(filename):
+    tree.pydot__tree_to_dot(parser.parse(sentence), filename)
+
+if __name__ == '__main__':
+    print(parser.parse(sentence).pretty())
+    # make_png(sys.argv[1])
+    # make_dot(sys.argv[1])
+```
+
+## Example Output
+
+```
+_ambig
+  comparative
+    noun	fruit
+    verb	flies
+    noun	bananas
+  simple
+    noun
+      fruit
+      flies
+    verb	like
+    noun	bananas
+```
+
+(or view a nicer version by rendering to an image, e.g., "./fruitflies.png").

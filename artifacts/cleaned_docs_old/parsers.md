@@ -1,0 +1,79 @@
+---
+title: Parsers
+source_url: https://lark-parser.readthedocs.io/en/stable/parsers.html
+description: Overview of Lark's parsing algorithms (Earley, LALR(1), and CYK), their features, ambiguity handling, and lexer modes.
+---
+
+# Parsers
+
+Lark implements the following parsing algorithms: Earley, LALR(1), and CYK.
+
+## Earley
+
+An Earley parser is a chart parser capable of parsing any context-free grammar at O(n^3), and O(n^2) when the grammar is unambiguous. It can parse most LR grammars at O(n). Most programming languages are LR and can be parsed in linear time.
+
+Lark’s Earley implementation runs on top of a skipping chart parser, which allows it to use regular expressions instead of matching characters one-by-one. This is a significant improvement to Earley that is unique to Lark. This feature is used by default, but can also be requested explicitly using `lexer="dynamic"`.
+
+It’s possible to bypass dynamic lexing and use the regular Earley parser with a basic lexer that tokenizes as an independent first step. Doing so may provide a speed benefit, but will tokenize without using Earley’s ambiguity-resolution ability. Choose this only if you know why. Activate with `lexer="basic"`.
+
+### SPPF and ambiguity resolution
+
+Lark implements the Shared Packed Parse Forest (SPPF) data structure for the Earley parser in order to reduce the space and computation required to handle ambiguous grammars.
+
+You can read more about SPPF here: https://web.archive.org/web/20191229100607/www.bramvandersanden.com/post/2014/06/shared-packed-parse-forest
+
+As a result, Lark can efficiently parse and store every ambiguity in the grammar when using Earley.
+
+Lark provides the following options to combat ambiguity:
+
+1. Default: Lark chooses the best derivation for you. Users can choose between different disambiguation strategies, and can prioritize (or demote) individual rules over others using the rule-priority syntax.
+2. Explicit ambiguities: Users may choose to receive the set of all possible parse trees (using `ambiguity="explicit"`), and choose the best derivation themselves. While simple and flexible, it comes at a cost of space and performance, and isn’t recommended for highly ambiguous grammars or very long inputs.
+3. Advanced: Users may use specialized visitors to iterate the SPPF themselves. There is also a 3rd party utility for iterating over the SPPF: https://github.com/chanicpanic/lark-ambig-tools
+
+### lexer="dynamic_complete"
+
+Earley’s dynamic lexer uses regular expressions in order to tokenize the text. It tries every possible combination of terminals, but it matches each terminal exactly once, returning the longest possible match.
+
+For example, when `lexer="dynamic"` (the default), the terminal `/a+/`, when given the text `"aa"`, will return one result, `aa`, even though `a` would also be correct. This behavior is much faster and usually what you would expect.
+
+Setting `lexer="dynamic_complete"` instructs the lexer to consider every possible regular expression match. This ensures that the parser will consider and resolve every ambiguity, even inside the terminals themselves. This lexer provides the same capabilities as scannerless Earley, but with different performance trade-offs.
+
+Warning: This lexer can be much slower, especially for open-ended terminals such as `/.*/`.
+
+## LALR(1)
+
+LALR(1) is a very efficient, tried-and-tested parsing algorithm. It’s incredibly fast and requires very little memory. It can parse most programming languages (for example: Python and Java).
+
+LALR(1) stands for:
+
+- Left-to-right parsing order
+- Rightmost derivation, bottom-up
+- Lookahead of 1 token
+
+Lark comes with an efficient implementation that outperforms every other parsing library for Python (including PLY).
+
+Lark extends the traditional YACC-based architecture with a contextual lexer, which processes feedback from the parser, making the LALR(1) algorithm stronger than ever.
+
+The contextual lexer communicates with the parser, and uses the parser’s lookahead prediction to narrow its choice of terminals. At each point, the lexer only matches the subgroup of terminals that are legal at that parser state, instead of all terminals. It’s effective at resolving common terminal collisions, and allows parsing of languages that LALR(1) was previously incapable of parsing.
+
+(If you’re familiar with YACC, you can think of it as automatic lexer states.)
+
+This is an improvement to LALR(1) that is unique to Lark.
+
+### Grammar constraints in LALR(1)
+
+Due to having only a lookahead of one token, LALR is limited in its ability to choose between rules when they both match the input.
+
+Tips for writing a conforming grammar:
+
+- Try to avoid writing different rules that can match the same sequence of characters.
+- For the best performance, prefer left recursion over right recursion.
+- Consider setting terminal priority only as a last resort.
+
+For a better understanding of these constraints, it’s recommended to learn how an SLR parser works. SLR is very similar to LALR but much simpler.
+
+## CYK parser
+
+A CYK parser can parse any context-free grammar at O(n^3*|G|).
+
+It’s too slow to be practical for simple grammars, but it offers good performance for highly ambiguous grammars.
