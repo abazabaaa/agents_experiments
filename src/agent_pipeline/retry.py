@@ -17,7 +17,9 @@ if TYPE_CHECKING:  # pragma: no cover
 T = TypeVar("T")
 
 # HTTP status codes that commonly indicate a transient failure.
-DEFAULT_RETRYABLE_STATUS_CODES: frozenset[int] = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+DEFAULT_RETRYABLE_STATUS_CODES: frozenset[int] = frozenset(
+    {408, 409, 425, 429, 500, 502, 503, 504}
+)
 
 RETRY_STATUS_MESSAGES: dict[int, str] = {
     408: "Request Timeout",
@@ -52,7 +54,9 @@ def _compute_delay(attempt: int, policy: RetryPolicy, rng: random.Random) -> flo
     return rng.uniform(low, high)
 
 
-def is_retryable_exception(exc: BaseException, retryable_status_codes: Iterable[int]) -> bool:
+def is_retryable_exception(
+    exc: BaseException, retryable_status_codes: Iterable[int]
+) -> bool:
     """Return ``True`` if ``exc`` represents a transient error."""
 
     if isinstance(exc, httpx.TimeoutException):

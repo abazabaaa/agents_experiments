@@ -36,7 +36,9 @@ async def router_supervisor(
     record_failure: RecordFailureFn,
 ) -> None:
     router_agent = registry.get_agent("router", output_type=RoutingDecision)
-    router_timeout = config.agent_specs["router"].timeout
+    router_spec = config.agent_specs["router"]
+    router_timeout = router_spec.timeout
+    router_max_turns = router_spec.run_max_turns
     router_pool = config.concurrency.router_pool
 
     async def worker(worker_idx: int) -> None:
@@ -44,10 +46,13 @@ async def router_supervisor(
             async for task in channel:
                 doc_size = len(task.content)
                 if doc_size > LARGE_DOCUMENT_THRESHOLD:
-                    logger.verbose(f"DOC_SIZE_WARNING doc={task.doc_id} bytes={doc_size}")
+                    logger.verbose(
+                        f"DOC_SIZE_WARNING doc={task.doc_id} bytes={doc_size}"
+                    )
                 kind = infer_doc_kind(task.url, task.metadata)
                 rationale: str | None = None
                 if not kind:
+
                     async def attempt(attempt_index: int) -> RoutingDecision:
                         metadata = dict(task.metadata)
                         metadata.setdefault("stage", "routing")
@@ -61,7 +66,7 @@ async def router_supervisor(
                             trace_id=None,
                         )
                         run_config = build_run_config(config, context)
-                        prompt = build_router_prompt(task)
+                        prompt = build_router_prompt(config, task)
                         result = await call_agent(
                             router_agent,
                             prompt,
@@ -69,6 +74,7 @@ async def router_supervisor(
                             run_config=run_config,
                             limiter_pool=limiter_pool,
                             timeout=router_timeout,
+                            run_max_turns=router_max_turns,
                         )
                         return result.final_output
 
@@ -94,12 +100,24 @@ async def router_supervisor(
                 logger.verbose(
                     f"ROUTED doc={task.doc_id} url={task.url} kind={kind} rationale={truncate(rationale)}"
                 )
+                # Carry forward any reviewer feedback present in metadata
+                feedback_text: str | None = None
+                last_issues = task.metadata.get("last_review_issues")
+                last_suggestions = task.metadata.get("last_review_suggestions")
+                if isinstance(last_issues, str) and last_issues.strip():
+                    feedback_text = last_issues.strip()
+                if isinstance(last_suggestions, str) and last_suggestions.strip():
+                    feedback_text = (
+                        (feedback_text + "\n\nSuggestions:\n" if feedback_text else "Suggestions:\n")
+                        + last_suggestions.strip()
+                    )
                 item = WorkItem(
                     doc_id=task.doc_id,
                     url=task.url,
                     content=task.content,
                     metadata=task.metadata,
                     kind=kind,  # type: ignore[arg-type]
+                    review_feedback=feedback_text,
                 )
                 if kind == "markdown":
                     await markdown_send.send(item)

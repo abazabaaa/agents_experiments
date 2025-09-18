@@ -7,9 +7,10 @@ import logging
 import os
 import shutil
 import traceback
+from collections.abc import Awaitable, Callable
 from datetime import datetime
+from functools import partial
 from pathlib import Path
-from typing import Awaitable, Callable, Iterable
 from uuid import uuid4
 
 import httpx
@@ -24,12 +25,24 @@ from .limiters import LimiterPool
 from .logging import StructuredLogger
 from .stages.ingest import ingest_documents, load_documents
 from .stages.markdown import markdown_supervisor
-from .stages.monitor import close_when_both_done, close_when_done, monitor_channels, watch_completion
+from .stages.monitor import (
+    close_when_both_done,
+    close_when_done,
+    monitor_channels,
+    watch_completion,
+)
 from .stages.naming import naming_supervisor
 from .stages.notebook import notebook_supervisor
 from .stages.review import review_supervisor
 from .stages.router import router_supervisor
-from .stages.types import CompletionCounter, DocTask, NamedDoc, ProcessedDoc, ReviewedDoc, WorkItem
+from .stages.types import (
+    CompletionCounter,
+    DocTask,
+    NamedDoc,
+    ProcessedDoc,
+    ReviewedDoc,
+    WorkItem,
+)
 from .stages.writer import writer_stage
 
 RecordFailureFn = Callable[[int, str, str, Exception], Awaitable[None]]
@@ -109,43 +122,49 @@ class Pipeline:
             async with trio.open_nursery() as nursery:
                 nursery.start_soon(ingest_documents, docs, router_send)
                 nursery.start_soon(
-                    router_supervisor,
-                    registry=self.registry,
-                    config=self.config,
-                    logger=self.logger,
-                    limiter_pool=self.limiter_pool,
-                    retry_policy=self.config.retry_policy,
-                    receive=router_receive,
-                    markdown_send=markdown_send,
-                    notebook_send=notebook_send,
-                    completion_counter=completion_counter,
-                    record_failure=self._record_failure,
+                    partial(
+                        router_supervisor,
+                        registry=self.registry,
+                        config=self.config,
+                        logger=self.logger,
+                        limiter_pool=self.limiter_pool,
+                        retry_policy=self.config.retry_policy,
+                        receive=router_receive,
+                        markdown_send=markdown_send,
+                        notebook_send=notebook_send,
+                        completion_counter=completion_counter,
+                        record_failure=self._record_failure,
+                    )
                 )
                 nursery.start_soon(
-                    markdown_supervisor,
-                    registry=self.registry,
-                    config=self.config,
-                    logger=self.logger,
-                    limiter_pool=self.limiter_pool,
-                    retry_policy=self.config.retry_policy,
-                    receive=markdown_receive,
-                    review_send=review_send,
-                    finished_event=markdown_done,
-                    completion_counter=completion_counter,
-                    record_failure=self._record_failure,
+                    partial(
+                        markdown_supervisor,
+                        registry=self.registry,
+                        config=self.config,
+                        logger=self.logger,
+                        limiter_pool=self.limiter_pool,
+                        retry_policy=self.config.retry_policy,
+                        receive=markdown_receive,
+                        review_send=review_send,
+                        finished_event=markdown_done,
+                        completion_counter=completion_counter,
+                        record_failure=self._record_failure,
+                    )
                 )
                 nursery.start_soon(
-                    notebook_supervisor,
-                    registry=self.registry,
-                    config=self.config,
-                    logger=self.logger,
-                    limiter_pool=self.limiter_pool,
-                    retry_policy=self.config.retry_policy,
-                    receive=notebook_receive,
-                    review_send=review_send,
-                    finished_event=notebook_done,
-                    completion_counter=completion_counter,
-                    record_failure=self._record_failure,
+                    partial(
+                        notebook_supervisor,
+                        registry=self.registry,
+                        config=self.config,
+                        logger=self.logger,
+                        limiter_pool=self.limiter_pool,
+                        retry_policy=self.config.retry_policy,
+                        receive=notebook_receive,
+                        review_send=review_send,
+                        finished_event=notebook_done,
+                        completion_counter=completion_counter,
+                        record_failure=self._record_failure,
+                    )
                 )
                 nursery.start_soon(
                     close_when_both_done,
@@ -154,52 +173,64 @@ class Pipeline:
                     review_send,
                 )
                 nursery.start_soon(
-                    review_supervisor,
-                    registry=self.registry,
-                    config=self.config,
-                    logger=self.logger,
-                    limiter_pool=self.limiter_pool,
-                    retry_policy=self.config.retry_policy,
-                    receive=review_receive,
-                    naming_send=naming_send,
-                    finished_event=review_done,
-                    completion_counter=completion_counter,
-                    record_failure=self._record_failure,
+                    partial(
+                        review_supervisor,
+                        registry=self.registry,
+                        config=self.config,
+                        logger=self.logger,
+                        limiter_pool=self.limiter_pool,
+                        retry_policy=self.config.retry_policy,
+                        receive=review_receive,
+                        markdown_send=markdown_send,
+                        notebook_send=notebook_send,
+                        naming_send=naming_send,
+                        finished_event=review_done,
+                        completion_counter=completion_counter,
+                        record_failure=self._record_failure,
+                    )
                 )
                 nursery.start_soon(close_when_done, review_done, naming_send)
                 nursery.start_soon(
-                    naming_supervisor,
-                    registry=self.registry,
-                    config=self.config,
-                    logger=self.logger,
-                    limiter_pool=self.limiter_pool,
-                    retry_policy=self.config.retry_policy,
-                    receive=naming_receive,
-                    write_send=write_send,
-                    finished_event=naming_done,
-                    completion_counter=completion_counter,
-                    record_failure=self._record_failure,
+                    partial(
+                        naming_supervisor,
+                        registry=self.registry,
+                        config=self.config,
+                        logger=self.logger,
+                        limiter_pool=self.limiter_pool,
+                        retry_policy=self.config.retry_policy,
+                        receive=naming_receive,
+                        write_send=write_send,
+                        finished_event=naming_done,
+                        completion_counter=completion_counter,
+                        record_failure=self._record_failure,
+                    )
                 )
                 nursery.start_soon(close_when_done, naming_done, write_send)
                 nursery.start_soon(
-                    writer_stage,
-                    receive=write_receive,
-                    output_directory=self.config.output_directory,
-                    logger=self.logger,
-                    completion_counter=completion_counter,
+                    partial(
+                        writer_stage,
+                        receive=write_receive,
+                        output_directory=self.config.output_directory,
+                        logger=self.logger,
+                        completion_counter=completion_counter,
+                    )
                 )
                 nursery.start_soon(
-                    monitor_channels,
-                    logger=self.logger,
-                    channels=channel_map,
-                    counter=completion_counter,
+                    partial(
+                        monitor_channels,
+                        logger=self.logger,
+                        channels=channel_map,
+                        counter=completion_counter,
+                    )
                 )
                 nursery.start_soon(
-                    watch_completion,
-                    logger=self.logger,
-                    counter=completion_counter,
-                    nursery=nursery,
-                    done_events=done_events,
+                    partial(
+                        watch_completion,
+                        logger=self.logger,
+                        counter=completion_counter,
+                        nursery=nursery,
+                        done_events=done_events,
+                    )
                 )
 
             if self.failures:
@@ -210,7 +241,8 @@ class Pipeline:
                     )
         finally:
             if self._openai_client is not None:
-                await self._openai_client.aclose()
+                # Bridge asyncio-based close() into Trio using trio-asyncio.
+                await trio_asyncio.aio_as_trio(self._openai_client.close)()
 
     async def _record_failure(
         self,
@@ -266,9 +298,11 @@ class Pipeline:
 
     def _prepare_run_artifacts(self) -> tuple[Path, Path]:
         original_log = self.config.log_file
-        parent = original_log.parent if original_log.parent != Path("") else Path("logs")
+        parent = (
+            original_log.parent if original_log.parent != Path("") else Path("logs")
+        )
         stem = original_log.stem or "pipeline"
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%Hh%Mm%Ss")
         run_id = f"{stem}-{timestamp}-{uuid4().hex[:6]}"
         run_dir = parent / run_id
         run_dir.mkdir(parents=True, exist_ok=False)

@@ -72,7 +72,9 @@ class _StructuredLoggingHandler(logging.Handler):
         super().__init__()
         self._structured_logger = structured_logger
 
-    def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - logging bridge
+    def emit(
+        self, record: logging.LogRecord
+    ) -> None:  # pragma: no cover - logging bridge
         try:
             message = self.format(record)
         except Exception:  # noqa: BLE001
@@ -102,14 +104,18 @@ class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
     def __init__(self, context: AgentCallContext) -> None:
         self._context = context
 
-    def _ensure_context(self, wrapper: RunContextWrapper[AgentCallContext]) -> AgentCallContext:
+    def _ensure_context(
+        self, wrapper: RunContextWrapper[AgentCallContext]
+    ) -> AgentCallContext:
         ctx = wrapper.context
         if ctx is not self._context:
             self._context = ctx
         return ctx
 
     async def on_agent_start(
-        self, context: RunContextWrapper[AgentCallContext], agent: Agent[AgentCallContext]
+        self,
+        context: RunContextWrapper[AgentCallContext],
+        agent: Agent[AgentCallContext],
     ) -> None:
         ctx = self._ensure_context(context)
         ctx.logger.verbose(
@@ -166,7 +172,10 @@ class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
         )
 
     async def on_tool_start(
-        self, context: RunContextWrapper[AgentCallContext], agent: Agent[AgentCallContext], tool: Any
+        self,
+        context: RunContextWrapper[AgentCallContext],
+        agent: Agent[AgentCallContext],
+        tool: Any,
     ) -> None:
         ctx = self._ensure_context(context)
         ctx.logger.verbose(

@@ -29,7 +29,9 @@ async def test_retry_async_successful_after_transient_errors() -> None:
         if state.attempt < 3:
             request = httpx.Request("GET", "https://example.com")
             response = httpx.Response(429, request=request)
-            raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+            raise httpx.HTTPStatusError(
+                "rate limited", request=request, response=response
+            )
         return "ok"
 
     result = await retry_async(flaky, policy=policy, rng=random.Random(0))

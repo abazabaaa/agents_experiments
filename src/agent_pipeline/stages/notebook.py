@@ -34,7 +34,9 @@ async def notebook_supervisor(
     record_failure: RecordFailureFn,
 ) -> None:
     agent = registry.get_agent("notebook_refactor", output_type=NotebookRefactorResult)
-    agent_timeout = config.agent_specs["notebook_refactor"].timeout
+    agent_spec = config.agent_specs["notebook_refactor"]
+    agent_timeout = agent_spec.timeout
+    agent_max_turns = agent_spec.run_max_turns
     pool = config.concurrency.notebook_pool
 
     async def worker(worker_idx: int) -> None:
@@ -54,7 +56,7 @@ async def notebook_supervisor(
                         trace_id=None,
                     )
                     run_config = build_run_config(config, context)
-                    prompt = build_notebook_prompt(item)
+                    prompt = build_notebook_prompt(config, item)
                     result = await call_agent(
                         agent,
                         prompt,
@@ -62,6 +64,7 @@ async def notebook_supervisor(
                         run_config=run_config,
                         limiter_pool=limiter_pool,
                         timeout=agent_timeout,
+                        run_max_turns=agent_max_turns,
                     )
                     return result.final_output
 

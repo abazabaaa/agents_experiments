@@ -41,7 +41,10 @@ def load_documents(payload: dict[str, object]) -> list[DocTask]:
             if not isinstance(metadata, dict):
                 metadata = {}
             doc = DocTask(
-                doc_id=len(docs) + 1, url=str(url), content=str(content), metadata=dict(metadata)
+                doc_id=len(docs) + 1,
+                url=str(url),
+                content=str(content),
+                metadata=dict(metadata),
             )
             docs.append(doc)
     return docs

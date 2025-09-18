@@ -25,8 +25,9 @@ class NotebookRefactorResult(BaseModel):
 
 class ReviewResult(BaseModel):
     approved: bool
-    issues: str | None = None
-    suggestions: str | None = None
+    # Keep reviewer text compact to reduce truncation/JSON breakage.
+    issues: str | None = Field(default=None, max_length=1200)
+    suggestions: str | None = Field(default=None, max_length=800)
 
 
 class NamingResult(BaseModel):

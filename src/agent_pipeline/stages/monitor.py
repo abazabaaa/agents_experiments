@@ -6,7 +6,11 @@ from typing import Any, Iterable
 
 import trio
 
-from ..constants import CHANNEL_MONITOR_INTERVAL, CHANNEL_PRESSURE_FRACTION, SHUTDOWN_TIMEOUT
+from ..constants import (
+    CHANNEL_MONITOR_INTERVAL,
+    CHANNEL_PRESSURE_FRACTION,
+    SHUTDOWN_TIMEOUT,
+)
 from ..logging import StructuredLogger
 from .types import CompletionCounter
 
@@ -42,7 +46,9 @@ async def monitor_channels(
                     and isinstance(current, int)
                     and current >= int(max_size * CHANNEL_PRESSURE_FRACTION)
                 ):
-                    logger.verbose(f"CHANNEL_PRESSURE name={name} load={current}/{max_size}")
+                    logger.verbose(
+                        f"CHANNEL_PRESSURE name={name} load={current}/{max_size}"
+                    )
                 if isinstance(waiting_senders, int) and waiting_senders > 0:
                     logger.verbose(
                         f"CHANNEL_BACKPRESSURE name={name} waiting_senders={waiting_senders}"
@@ -73,7 +79,9 @@ async def watch_completion(
         nursery.cancel_scope.cancel()
 
 
-async def close_when_done(done_event: trio.Event, send_channel: trio.MemorySendChannel[Any]) -> None:
+async def close_when_done(
+    done_event: trio.Event, send_channel: trio.MemorySendChannel[Any]
+) -> None:
     await done_event.wait()
     await send_channel.aclose()
 

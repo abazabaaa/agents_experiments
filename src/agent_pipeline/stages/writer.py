@@ -25,7 +25,11 @@ async def writer_stage(
         async for doc in receive:
             async with lock:
                 base = doc.file_slug or "document"
-                ext = doc.extension if doc.extension.startswith(".") else f".{doc.extension}"
+                ext = (
+                    doc.extension
+                    if doc.extension.startswith(".")
+                    else f".{doc.extension}"
+                )
                 filename = f"{base}{ext}"
                 target = output_directory / filename
                 while target.exists():

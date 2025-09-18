@@ -35,7 +35,9 @@ async def naming_supervisor(
     record_failure: RecordFailureFn,
 ) -> None:
     agent = registry.get_agent("namer", output_type=NamingResult)
-    agent_timeout = config.agent_specs["namer"].timeout
+    agent_spec = config.agent_specs["namer"]
+    agent_timeout = agent_spec.timeout
+    agent_max_turns = agent_spec.run_max_turns
     pool = max(1, config.concurrency.naming_pool)
 
     async def worker(worker_idx: int) -> None:
@@ -55,7 +57,7 @@ async def naming_supervisor(
                         trace_id=None,
                     )
                     run_config = build_run_config(config, context)
-                    prompt = build_naming_prompt(doc)
+                    prompt = build_naming_prompt(config, doc)
                     result = await call_agent(
                         agent,
                         prompt,
@@ -63,6 +65,7 @@ async def naming_supervisor(
                         run_config=run_config,
                         limiter_pool=limiter_pool,
                         timeout=agent_timeout,
+                        run_max_turns=agent_max_turns,
                     )
                     return result.final_output
 

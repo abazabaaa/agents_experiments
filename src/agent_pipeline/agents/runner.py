@@ -11,7 +11,12 @@ from agents.run import RunConfig
 
 from ..config import RetryPolicy
 from ..constants import DEFAULT_AGENT_TIMEOUT
-from ..logging import AgentCallContext, LifecycleLoggingHooks, StructuredLogger, TRACE_ID_VAR
+from ..logging import (
+    AgentCallContext,
+    LifecycleLoggingHooks,
+    StructuredLogger,
+    TRACE_ID_VAR,
+)
 from ..limiters import LimiterPool
 from ..retry import execute_with_retry
 from ..bridge.asyncio import run_agent as run_agent_asyncio
@@ -25,6 +30,7 @@ async def call_agent(
     run_config: RunConfig,
     limiter_pool: LimiterPool,
     timeout: Optional[float] = None,
+    run_max_turns: Optional[int] = None,
 ) -> Any:
     """Call ``agent`` with concurrency limiting and logging."""
 
@@ -36,12 +42,17 @@ async def call_agent(
         token = TRACE_ID_VAR.set(context.trace_id or context.run_id)
         try:
             with trio.move_on_after(deadline) as cancel_scope:
+                kwargs: dict[str, Any] = {
+                    "context": context,
+                    "hooks": hooks,
+                    "run_config": run_config,
+                }
+                if run_max_turns is not None:
+                    kwargs["max_turns"] = run_max_turns
                 result = await run_agent_asyncio(
                     agent,
                     message,
-                    context=context,
-                    hooks=hooks,
-                    run_config=run_config,
+                    **kwargs,
                 )
             if cancel_scope.cancelled_caught:
                 raise TimeoutError(

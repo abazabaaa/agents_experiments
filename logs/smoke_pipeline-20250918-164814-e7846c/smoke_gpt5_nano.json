@@ -1,10 +1,10 @@
 {
   "logging": {
     "log_file": "logs/smoke_pipeline.log",
-    "trace_workflow_name": "gpt5-mini-smoke",
+    "trace_workflow_name": "gpt5-nano-smoke",
     "trace_metadata": {
       "project": "agent-pipeline-smoke",
-      "benchmark": "gpt5-mini"
+      "benchmark": "gpt5-nano"
     }
   },
   "io": {
@@ -27,7 +27,7 @@
       "write": 16
     },
     "model_limits": {
-      "gpt-5-mini": 32
+      "gpt-5-nano": 32
     },
     "agent_thread_limit": 48
   },
@@ -37,14 +37,6 @@
     "backoff_multiplier": 2.0,
     "max_delay": 60.0,
     "jitter_ratio": 0.25
-  },
-  "prompts": {
-    "dir": "prompts/smoke"
-  },
-  "rework": {
-    "enabled": true,
-    "max_cycles": 1,
-    "target_on_reject": "router"
   },
   "httpx": {
     "connect": 5.0,
@@ -56,61 +48,47 @@
     "router": {
       "name": "Router",
       "instructions": "Classify incoming documentation as markdown prose or notebook content. Respond with the route only.",
-      "model": "gpt-5-mini",
+      "model": "gpt-5-nano",
       "reasoning_effort": "minimal",
       "verbosity": "low",
       "timeout": 180.0,
-      "max_tokens": 1024,
-      "run_max_turns": 1
+      "max_tokens": 128
     },
     "markdown_cleaner": {
       "name": "MarkdownPolisher",
       "instructions": "Normalize markdown documentation while preserving technical accuracy and code fences.",
-      "model": "gpt-5-mini",
-      "reasoning_effort": "medium",
-      "verbosity": "medium",
+      "model": "gpt-5-nano",
+      "reasoning_effort": "minimal",
+      "verbosity": "low",
       "timeout": 240.0,
-      "max_tokens": 50000,
-      "run_max_turns": 1
+      "max_tokens": 2048
     },
     "notebook_refactor": {
       "name": "NotebookRefactorer",
       "instructions": "Convert notebook content into a concise Python script with comments and preserved grammar blocks.",
-      "model": "gpt-5-mini",
-      "reasoning_effort": "medium",
-      "verbosity": "medium",
+      "model": "gpt-5-nano",
+      "reasoning_effort": "minimal",
+      "verbosity": "low",
       "timeout": 240.0,
-      "max_tokens": 50000,
-      "run_max_turns": 2
+      "max_tokens": 2048
     },
     "reviewer": {
       "name": "QualityReviewer",
       "instructions": "Approve only if the transformed document is correct, consistent, and ready to publish. Otherwise, provide actionable issues. Keep responses terse and strictly adhere to the JSON schema; do not include markdown or code fences.",
-      "model": "gpt-5-mini",
-      "reasoning_effort": "medium",
-      "verbosity": "medium",
+      "model": "gpt-5-nano",
+      "reasoning_effort": "minimal",
+      "verbosity": "low",
       "timeout": 180.0,
-      "max_tokens": 8192,
-      "run_max_turns": 2,
-      "attempt_overrides": {
-        "on_invalid_json": {
-          "prompt_suffix": "prompts/smoke/review_on_invalid_json.md",
-          "model_settings": {
-            "max_tokens": 4096,
-            "verbosity": "low"
-          }
-        }
-      }
+      "max_tokens": 2048
     },
     "namer": {
       "name": "FileNamer",
       "instructions": "Produce a kebab-case slug and extension appropriate for the processed document.",
-      "model": "gpt-5-mini",
+      "model": "gpt-5-nano",
       "reasoning_effort": "minimal",
       "verbosity": "low",
       "timeout": 120.0,
-      "max_tokens": 1024,
-      "run_max_turns": 1
+      "max_tokens": 128
     }
   }
 }

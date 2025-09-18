@@ -6,7 +6,11 @@ from agent_pipeline.stages.ingest import load_documents
 def test_load_documents_filters_invalid_entries() -> None:
     payload = {
         "scraped_documents": [
-            {"url": "https://example.com/a", "markdown": "# Title", "metadata": {"mimeType": "text/markdown"}},
+            {
+                "url": "https://example.com/a",
+                "markdown": "# Title",
+                "metadata": {"mimeType": "text/markdown"},
+            },
             {"url": "", "markdown": "# Missing URL"},
             "not-a-dict",
         ],
