@@ -11,6 +11,7 @@ from agents.run import RunConfig
 
 from ..config import RetryPolicy
 from ..constants import DEFAULT_AGENT_TIMEOUT
+from ..conversation import AgentInput, ensure_conversation
 from ..logging import (
     AgentCallContext,
     LifecycleLoggingHooks,
@@ -24,7 +25,7 @@ from ..bridge.asyncio import run_agent as run_agent_asyncio
 
 async def call_agent(
     agent: Agent[Any],
-    message: str,
+    message: AgentInput,
     *,
     context: AgentCallContext,
     run_config: RunConfig,
@@ -51,7 +52,7 @@ async def call_agent(
                     kwargs["max_turns"] = run_max_turns
                 result = await run_agent_asyncio(
                     agent,
-                    message,
+                    ensure_conversation(message),
                     **kwargs,
                 )
             if cancel_scope.cancelled_caught:

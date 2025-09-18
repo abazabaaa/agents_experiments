@@ -2,10 +2,34 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal
 
 import trio
+
+
+@dataclass(slots=True)
+class WorkflowContext:
+    """Typed context shared across agent runs.
+
+    This carries immutable pipeline-level metadata that dynamic instruction
+    functions can access.
+    """
+
+    workflow_name: str
+    config_path: Path
+    trace_metadata: Mapping[str, Any]
+
+
+@dataclass(slots=True)
+class DocumentContext:
+    """Per-document context injected into agent runs."""
+
+    doc_id: int
+    url: str
+    metadata: Mapping[str, Any]
 
 
 @dataclass(slots=True)
