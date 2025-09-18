@@ -12,3 +12,8 @@ dependencies = [
     "trio-asyncio>=0.15.0",
     "ty>=0.0.1a20",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]

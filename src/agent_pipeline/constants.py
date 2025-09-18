@@ -1,0 +1,10 @@
+"""Project-wide constants for the agent pipeline."""
+
+from __future__ import annotations
+
+AGENT_THREAD_LIMIT_DEFAULT = 10
+DEFAULT_AGENT_TIMEOUT = 300.0
+LARGE_DOCUMENT_THRESHOLD = 1_000_000
+CHANNEL_PRESSURE_FRACTION = 0.8
+CHANNEL_MONITOR_INTERVAL = 10.0
+SHUTDOWN_TIMEOUT = 30.0
