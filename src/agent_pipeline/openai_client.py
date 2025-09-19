@@ -28,12 +28,17 @@ class InstrumentedAsyncClient(httpx.AsyncClient):
             response = await super().send(request, **kwargs)
         except Exception as exc:  # pragma: no cover - exercised in integration
             elapsed = time.perf_counter() - start
-            _HTTP_LOGGER.error(
+            level = logging.ERROR
+            if isinstance(exc, RuntimeError) and "Event loop is closed" in str(exc):
+                level = logging.DEBUG
+            _HTTP_LOGGER.log(
+                level,
                 "HTTP %s %s failed after %.2fs: %s",
                 request.method,
                 request.url,
                 elapsed,
                 exc,
+                exc_info=level >= logging.ERROR,
             )
             raise
 
@@ -65,7 +70,8 @@ class ClientTuning:
     max_retries: int = 5
     log_successes: bool = False
     max_connections: int = 40
-    max_keepalive_connections: int = 20
+    max_keepalive_connections: int = 0
+    keepalive_expiry: float | None = None
 
 
 def build_async_openai_client(
@@ -91,17 +97,19 @@ def build_async_openai_client(
         limits=httpx.Limits(
             max_connections=tuning.max_connections,
             max_keepalive_connections=tuning.max_keepalive_connections,
+            keepalive_expiry=tuning.keepalive_expiry,
         ),
     )
 
     _HTTP_LOGGER.debug(
         "Configured HTTP client timeout(connect=%.1fs read=%s write=%s pool=%.1fs)"
-        " max_retries=%s",
+        " max_retries=%s keepalive=%s",
         timeout.connect,
         "infinite" if timeout.read is None else f"{timeout.read:.1f}s",
         "infinite" if timeout.write is None else f"{timeout.write:.1f}s",
         timeout.pool,
         tuning.max_retries,
+        "disabled" if tuning.max_keepalive_connections == 0 else tuning.max_keepalive_connections,
     )
 
     return AsyncOpenAI(
@@ -109,4 +117,3 @@ def build_async_openai_client(
         http_client=http_client,
         max_retries=tuning.max_retries,
     )
-
