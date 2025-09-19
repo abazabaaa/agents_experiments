@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -22,7 +23,7 @@ class LoggingConfigModel(BaseModel):
 
     log_file: Path | None = None
     trace_workflow_name: str | None = Field(default=None, alias="trace_workflow_name")
-    trace_metadata: Dict[str, Any] = Field(default_factory=dict)
+    trace_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class IOConfigModel(BaseModel):
@@ -45,8 +46,8 @@ class ConcurrencyConfigModel(BaseModel):
     review_pool: int | None = None
     naming_pool: int | None = None
     channel_buffer: int | None = None
-    buffers: Dict[str, int] = Field(default_factory=dict)
-    model_limits: Dict[str, int] = Field(default_factory=dict)
+    buffers: dict[str, int] = Field(default_factory=dict)
+    model_limits: dict[str, int] = Field(default_factory=dict)
     agent_thread_limit: int | None = None
 
 
@@ -79,7 +80,7 @@ class AttemptOverrideModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     prompt_suffix: str | None = None
-    model_settings: Dict[str, Any] = Field(default_factory=dict)
+    model_settings: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentSpecModel(BaseModel):
@@ -89,26 +90,36 @@ class AgentSpecModel(BaseModel):
 
     name: str | None = None
     instructions: str | None = None
+    instructions_path: Path | None = None
     model: str | None = None
     reasoning_effort: str | None = None
     verbosity: str | None = None
     timeout: float | int | None = None
     max_tokens: int | None = None
     run_max_turns: int | None = None
-    model_settings: Dict[str, Any] = Field(default_factory=dict)
+    model_settings: dict[str, Any] = Field(default_factory=dict)
     tool_use_behavior: str | None = None
     reset_tool_choice: bool | None = None
-    attempt_overrides: Dict[str, AttemptOverrideModel] = Field(default_factory=dict)
+    attempt_overrides: dict[str, AttemptOverrideModel] = Field(default_factory=dict)
 
     @field_validator("model_settings")
     @classmethod
-    def ensure_dict(cls, value: Mapping[str, Any] | None) -> Dict[str, Any]:
+    def ensure_dict(cls, value: Mapping[str, Any] | None) -> dict[str, Any]:
         if value is None:
             return {}
         return dict(value)
 
+    @field_validator("instructions_path", mode="before")
+    @classmethod
+    def coerce_instructions_path(cls, value: Any) -> Path | None:
+        if value is None:
+            return None
+        if isinstance(value, Path):
+            return value
+        return Path(str(value))
 
-class AgentsConfigModel(RootModel[Dict[str, AgentSpecModel]]):
+
+class AgentsConfigModel(RootModel[dict[str, AgentSpecModel]]):
     """Dynamic mapping of agent keys to their configuration."""
 
 
@@ -118,11 +129,11 @@ class PromptsConfigModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     dir: Path | None = None
-    templates: Dict[str, str] = Field(default_factory=dict)
+    templates: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("templates", mode="before")
     @classmethod
-    def gather_templates(cls, value: Any, info: ValidationInfo) -> Dict[str, str]:
+    def gather_templates(cls, value: Any, info: ValidationInfo) -> dict[str, str]:
         if isinstance(value, dict):
             return {str(k): str(v) for k, v in value.items()}
         return {}
@@ -137,10 +148,10 @@ class PromptsConfigModel(BaseModel):
         return Path(str(value))
 
     @classmethod
-    def from_raw(cls, raw: Mapping[str, Any]) -> "PromptsConfigModel":
+    def from_raw(cls, raw: Mapping[str, Any]) -> PromptsConfigModel:
         raw = dict(raw)
         dir_value = raw.pop("dir", None)
-        inline: Dict[str, str] = {}
+        inline: dict[str, str] = {}
         for key, val in raw.items():
             if isinstance(val, (str, bytes)):
                 inline[str(key)] = str(val)
@@ -170,7 +181,7 @@ class PipelineConfigModel(BaseModel):
     retry: RetryConfigModel = Field(default_factory=RetryConfigModel)
     httpx: HTTPConfigModel = Field(default_factory=HTTPConfigModel)
     agents: AgentsConfigModel
-    prompts: Dict[str, Any] = Field(default_factory=dict)
+    prompts: dict[str, Any] = Field(default_factory=dict)
     rework: ReworkConfigModel = Field(default_factory=ReworkConfigModel)
 
     def build_prompts_model(self) -> PromptsConfigModel:

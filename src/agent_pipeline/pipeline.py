@@ -7,7 +7,6 @@ import logging
 import os
 import shutil
 import traceback
-from collections.abc import Awaitable, Callable
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -23,29 +22,10 @@ from .agents.registry import AgentRegistry
 from .config import PipelineConfig
 from .limiters import LimiterPool
 from .logging import StructuredLogger
-from .stages.ingest import ingest_documents, load_documents
-from .stages.markdown import markdown_supervisor
-from .stages.monitor import (
-    close_when_both_done,
-    close_when_done,
-    monitor_channels,
-    watch_completion,
-)
-from .stages.naming import naming_supervisor
-from .stages.notebook import notebook_supervisor
-from .stages.review import review_supervisor
-from .stages.router import router_supervisor
-from .stages.types import (
-    CompletionCounter,
-    DocTask,
-    NamedDoc,
-    ProcessedDoc,
-    ReviewedDoc,
-    WorkItem,
-)
+from .stages.ingest import load_documents
+from .stages.types import CompletionCounter, DocTask, NamedDoc
 from .stages.writer import writer_stage
-
-RecordFailureFn = Callable[[int, str, str, Exception], Awaitable[None]]
+from .workflow.runner import WorkflowError, WorkflowRunner
 
 
 class Pipeline:
@@ -83,129 +63,20 @@ class Pipeline:
             )
             self.config.output_directory.mkdir(parents=True, exist_ok=True)
 
-            stage_buffers = self.config.concurrency.stage_buffers
-            router_send, router_receive = trio.open_memory_channel[DocTask](
-                stage_buffers["router"]
-            )
-            markdown_send, markdown_receive = trio.open_memory_channel[WorkItem](
-                stage_buffers["markdown"]
-            )
-            notebook_send, notebook_receive = trio.open_memory_channel[WorkItem](
-                stage_buffers["notebook"]
-            )
-            review_send, review_receive = trio.open_memory_channel[ProcessedDoc](
-                stage_buffers["review"]
-            )
-            naming_send, naming_receive = trio.open_memory_channel[ReviewedDoc](
-                stage_buffers["naming"]
-            )
-            write_send, write_receive = trio.open_memory_channel[NamedDoc](
-                stage_buffers["write"]
-            )
-
-            markdown_done = trio.Event()
-            notebook_done = trio.Event()
-            review_done = trio.Event()
-            naming_done = trio.Event()
+            write_buffer = self.config.concurrency.stage_buffers.get("write", 10)
+            write_send, write_receive = trio.open_memory_channel[NamedDoc](write_buffer)
 
             completion_counter = CompletionCounter(total_docs)
-            channel_map = {
-                "router_send": router_send,
-                "markdown_send": markdown_send,
-                "notebook_send": notebook_send,
-                "review_send": review_send,
-                "naming_send": naming_send,
-                "write_send": write_send,
-            }
-            done_events = [markdown_done, notebook_done, review_done, naming_done]
+            workflow_runner = WorkflowRunner(
+                config=self.config,
+                registry=self.registry,
+                limiter_pool=self.limiter_pool,
+                logger=self.logger,
+            )
+            max_parallel = max(1, self.config.concurrency.agent_thread_limit)
+            document_sem = trio.Semaphore(max_parallel)
 
             async with trio.open_nursery() as nursery:
-                nursery.start_soon(ingest_documents, docs, router_send)
-                nursery.start_soon(
-                    partial(
-                        router_supervisor,
-                        registry=self.registry,
-                        config=self.config,
-                        logger=self.logger,
-                        limiter_pool=self.limiter_pool,
-                        retry_policy=self.config.retry_policy,
-                        receive=router_receive,
-                        markdown_send=markdown_send,
-                        notebook_send=notebook_send,
-                        completion_counter=completion_counter,
-                        record_failure=self._record_failure,
-                    )
-                )
-                nursery.start_soon(
-                    partial(
-                        markdown_supervisor,
-                        registry=self.registry,
-                        config=self.config,
-                        logger=self.logger,
-                        limiter_pool=self.limiter_pool,
-                        retry_policy=self.config.retry_policy,
-                        receive=markdown_receive,
-                        review_send=review_send,
-                        finished_event=markdown_done,
-                        completion_counter=completion_counter,
-                        record_failure=self._record_failure,
-                    )
-                )
-                nursery.start_soon(
-                    partial(
-                        notebook_supervisor,
-                        registry=self.registry,
-                        config=self.config,
-                        logger=self.logger,
-                        limiter_pool=self.limiter_pool,
-                        retry_policy=self.config.retry_policy,
-                        receive=notebook_receive,
-                        review_send=review_send,
-                        finished_event=notebook_done,
-                        completion_counter=completion_counter,
-                        record_failure=self._record_failure,
-                    )
-                )
-                nursery.start_soon(
-                    close_when_both_done,
-                    markdown_done,
-                    notebook_done,
-                    review_send,
-                )
-                nursery.start_soon(
-                    partial(
-                        review_supervisor,
-                        registry=self.registry,
-                        config=self.config,
-                        logger=self.logger,
-                        limiter_pool=self.limiter_pool,
-                        retry_policy=self.config.retry_policy,
-                        receive=review_receive,
-                        markdown_send=markdown_send,
-                        notebook_send=notebook_send,
-                        naming_send=naming_send,
-                        finished_event=review_done,
-                        completion_counter=completion_counter,
-                        record_failure=self._record_failure,
-                    )
-                )
-                nursery.start_soon(close_when_done, review_done, naming_send)
-                nursery.start_soon(
-                    partial(
-                        naming_supervisor,
-                        registry=self.registry,
-                        config=self.config,
-                        logger=self.logger,
-                        limiter_pool=self.limiter_pool,
-                        retry_policy=self.config.retry_policy,
-                        receive=naming_receive,
-                        write_send=write_send,
-                        finished_event=naming_done,
-                        completion_counter=completion_counter,
-                        record_failure=self._record_failure,
-                    )
-                )
-                nursery.start_soon(close_when_done, naming_done, write_send)
                 nursery.start_soon(
                     partial(
                         writer_stage,
@@ -215,34 +86,81 @@ class Pipeline:
                         completion_counter=completion_counter,
                     )
                 )
-                nursery.start_soon(
-                    partial(
-                        monitor_channels,
-                        logger=self.logger,
-                        channels=channel_map,
-                        counter=completion_counter,
+
+                for doc in docs:
+                    nursery.start_soon(
+                        self._process_document,
+                        workflow_runner,
+                        doc,
+                        write_send.clone(),
+                        document_sem,
+                        completion_counter,
                     )
-                )
+
                 nursery.start_soon(
-                    partial(
-                        watch_completion,
-                        logger=self.logger,
-                        counter=completion_counter,
-                        nursery=nursery,
-                        done_events=done_events,
-                    )
+                    self._close_writer_when_done,
+                    completion_counter,
+                    write_send,
                 )
 
-            if self.failures:
-                self.logger.info(f"Failures encountered: {len(self.failures)}")
-                for failure in self.failures:
-                    self.logger.info(
-                        f" - doc={failure['doc_id']} stage={failure['stage']} url={failure['url']} error={failure['error']}"
-                    )
         finally:
             if self._openai_client is not None:
                 # Bridge asyncio-based close() into Trio using trio-asyncio.
                 await trio_asyncio.aio_as_trio(self._openai_client.close)()
+
+        if self.failures:
+            self.logger.info(f"Failures encountered: {len(self.failures)}")
+            for failure in self.failures:
+                self.logger.info(
+                    f" - doc={failure['doc_id']} stage={failure['stage']} url={failure['url']} error={failure['error']}"
+                )
+
+    async def _process_document(
+        self,
+        workflow_runner: WorkflowRunner,
+        doc: DocTask,
+        write_send: trio.MemorySendChannel[NamedDoc],
+        semaphore: trio.Semaphore,
+        completion_counter: CompletionCounter,
+    ) -> None:
+        async with semaphore:
+            try:
+                artifacts = await workflow_runner.process_document(doc)
+            except WorkflowError as exc:
+                await self._record_failure(doc.doc_id, doc.url, "workflow", exc)
+            except Exception as exc:  # noqa: BLE001
+                await self._record_failure(doc.doc_id, doc.url, "workflow", exc)
+            else:
+                metadata = dict(doc.metadata)
+                metadata.update(
+                    {
+                        "route": artifacts.route,
+                        "summary": artifacts.summary,
+                        "review_approved": artifacts.review.approved,
+                        "review_issues": artifacts.review.issues,
+                        "review_suggestions": artifacts.review.suggestions,
+                        "rework_cycles": artifacts.rework_cycles,
+                    }
+                )
+                named_doc = NamedDoc(
+                    doc_id=doc.doc_id,
+                    url=doc.url,
+                    file_slug=artifacts.naming.file_slug,
+                    extension=artifacts.naming.extension,
+                    processed_text=artifacts.processed_text,
+                    metadata=metadata,
+                )
+                await write_send.send(named_doc)
+            finally:
+                await completion_counter.increment()
+
+    async def _close_writer_when_done(
+        self,
+        completion_counter: CompletionCounter,
+        write_send: trio.MemorySendChannel[NamedDoc],
+    ) -> None:
+        await completion_counter.completed.wait()
+        await write_send.aclose()
 
     async def _record_failure(
         self,

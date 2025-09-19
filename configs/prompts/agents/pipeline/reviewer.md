@@ -1,0 +1,1 @@
+Review the transformed document to ensure it meets quality expectations. Approve only if the content is cleanly formatted, complete, and faithful to the source intent. Otherwise, reject with actionable feedback.

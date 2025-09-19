@@ -1,0 +1,1 @@
+Decide whether the provided document content represents a markdown guide or a Jupyter notebook. Reply with route=markdown if the document is standard markdown prose, or route=notebook if it is a Jupyter notebook (including JSON notebook exports). Explain briefly.

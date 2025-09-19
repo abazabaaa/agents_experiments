@@ -55,37 +55,36 @@
   "agents": {
     "router": {
       "name": "Router",
-      "instructions": "Classify incoming documentation as markdown prose or notebook content. Respond with the route only.",
       "model": "gpt-5-mini",
       "reasoning_effort": "minimal",
       "verbosity": "low",
       "timeout": 180.0,
       "max_tokens": 1024,
-      "run_max_turns": 1
+      "run_max_turns": 1,
+      "instructions_path": "prompts/agents/smoke/router.md"
     },
     "markdown_cleaner": {
       "name": "MarkdownPolisher",
-      "instructions": "Normalize markdown documentation while preserving technical accuracy and code fences.",
       "model": "gpt-5-mini",
       "reasoning_effort": "medium",
       "verbosity": "medium",
       "timeout": 240.0,
       "max_tokens": 50000,
-      "run_max_turns": 1
+      "run_max_turns": 1,
+      "instructions_path": "prompts/agents/smoke/markdown_cleaner.md"
     },
     "notebook_refactor": {
       "name": "NotebookRefactorer",
-      "instructions": "Convert notebook content into a concise Python script with comments and preserved grammar blocks.",
       "model": "gpt-5-mini",
       "reasoning_effort": "medium",
       "verbosity": "medium",
       "timeout": 240.0,
       "max_tokens": 50000,
-      "run_max_turns": 2
+      "run_max_turns": 2,
+      "instructions_path": "prompts/agents/smoke/notebook_refactor.md"
     },
     "reviewer": {
       "name": "QualityReviewer",
-      "instructions": "Approve only if the transformed document is correct, consistent, and ready to publish. Otherwise, provide actionable issues. Keep responses terse and strictly adhere to the JSON schema; do not include markdown or code fences.",
       "model": "gpt-5-mini",
       "reasoning_effort": "medium",
       "verbosity": "medium",
@@ -100,17 +99,18 @@
             "verbosity": "low"
           }
         }
-      }
+      },
+      "instructions_path": "prompts/agents/smoke/reviewer.md"
     },
     "namer": {
       "name": "FileNamer",
-      "instructions": "Produce a kebab-case slug and extension appropriate for the processed document.",
       "model": "gpt-5-mini",
       "reasoning_effort": "minimal",
       "verbosity": "low",
       "timeout": 120.0,
       "max_tokens": 1024,
-      "run_max_turns": 1
+      "run_max_turns": 1,
+      "instructions_path": "prompts/agents/smoke/namer.md"
     }
   }
 }

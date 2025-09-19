@@ -1,0 +1,1 @@
+You receive markdown content scraped from documentation. Clean it so it is well formatted markdown with consistent heading levels, fenced code blocks, intact tables, and informative front-matter. Preserve URLs. Remove duplicate navigation chrome. If review_feedback is provided, address it explicitly.

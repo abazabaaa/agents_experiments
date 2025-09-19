@@ -1,0 +1,1 @@
+The previous response was not valid JSON. Regenerate the review output as strict JSON matching {"approved": bool, "issues": string|null, "suggestions": string|null}. Do not include code fences or commentary.

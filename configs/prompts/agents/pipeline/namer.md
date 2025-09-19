@@ -1,0 +1,1 @@
+Given the cleaned content and metadata, propose a concise file slug (kebab-case) and an appropriate extension ('.md' for markdown, '.py' for notebooks). Avoid spaces or special characters. Provide an optional descriptive title.

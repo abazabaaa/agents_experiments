@@ -1,0 +1,1 @@
+Approve only if the transformed document is correct, consistent, and ready to publish. Otherwise, provide actionable issues. Keep responses terse and strictly adhere to the JSON schema; do not include markdown or code fences.

@@ -6,10 +6,11 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from agents.model_settings import ModelSettings
 
+from ..prompts.loader import load_markdown
 from .models import PipelineConfigModel, PromptsConfigModel
 
 Number = float | int
@@ -29,7 +30,7 @@ def _coerce_int(value: Any, *, name: str, default: int) -> int:
     raise TypeError(f"{name} must be an integer (received {type(value)!r})")
 
 
-def _coerce_float(value: Any, *, name: str, allow_none: bool) -> Optional[float]:
+def _coerce_float(value: Any, *, name: str, allow_none: bool) -> float | None:
     """Return ``value`` coerced to ``float`` (or ``None`` when allowed)."""
     if value is None:
         if allow_none:
@@ -54,13 +55,13 @@ def _coerce_mapping(value: Any, *, name: str) -> Mapping[str, Any]:
 class HTTPTimeoutConfig:
     """Timeout configuration passed to ``httpx.AsyncClient``."""
 
-    connect: Optional[float] = 5.0
-    read: Optional[float] = 120.0
-    write: Optional[float] = 30.0
-    pool: Optional[float] = 5.0
+    connect: float | None = 5.0
+    read: float | None = 120.0
+    write: float | None = 30.0
+    pool: float | None = 5.0
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any] | None) -> "HTTPTimeoutConfig":
+    def from_payload(cls, payload: Mapping[str, Any] | None) -> HTTPTimeoutConfig:
         payload = payload or {}
         return cls(
             connect=_coerce_float(
@@ -85,7 +86,7 @@ class RetryPolicy:
     jitter_ratio: float = 0.25
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any] | None) -> "RetryPolicy":
+    def from_payload(cls, payload: Mapping[str, Any] | None) -> RetryPolicy:
         payload = payload or {}
         defaults = cls()
         max_attempts = _coerce_int(
@@ -155,7 +156,7 @@ class ConcurrencyConfig:
     agent_thread_limit: int = 10
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any] | None) -> "ConcurrencyConfig":
+    def from_payload(cls, payload: Mapping[str, Any] | None) -> ConcurrencyConfig:
         payload = payload or {}
         defaults = cls()
         buffers = _coerce_mapping(payload.get("buffers"), name="concurrency.buffers")
@@ -238,7 +239,7 @@ class PipelineConfig:
     concurrency: ConcurrencyConfig
     retry_policy: RetryPolicy
     httpx_timeout: HTTPTimeoutConfig
-    agent_specs: Mapping[str, "AgentSpec"]
+    agent_specs: Mapping[str, AgentSpec]
     stage_prompts: Mapping[str, str]
     # Rework policy for inter-stage review feedback loops
     rework_enabled: bool = False
@@ -246,7 +247,7 @@ class PipelineConfig:
     rework_target_on_reject: str = "same"  # one of: same, markdown, notebook
 
     @classmethod
-    def from_json(cls, path: Path) -> "PipelineConfig":
+    def from_json(cls, path: Path) -> PipelineConfig:
         payload = json.loads(path.read_text(encoding="utf-8"))
         base_dir = path.parent
         model = PipelineConfigModel.model_validate(payload)
@@ -299,12 +300,9 @@ class PipelineConfig:
                 )
             for file_path in prompts_dir.iterdir():
                 if file_path.is_file() and file_path.suffix.lower() in {".md", ".txt"}:
-                    try:
-                        content = file_path.read_text(encoding="utf-8")
-                    except OSError as exc:  # pragma: no cover - defensive
-                        raise OSError(
-                            f"Failed reading prompt file: {file_path}"
-                        ) from exc
+                    content = load_markdown(
+                        file_path, description=f"stage prompt '{file_path.stem}'"
+                    )
                     stage_prompts[file_path.stem] = content
 
         rework_enabled = bool(rework_cfg.get("enabled", False))
@@ -345,25 +343,54 @@ class AgentSpec:
     name: str
     instructions: str
     model: str
-    reasoning_effort: Optional[str]
-    verbosity: Optional[str]
-    timeout: Optional[float]
-    max_tokens: Optional[int]
-    run_max_turns: Optional[int] = None
+    reasoning_effort: str | None
+    verbosity: str | None
+    timeout: float | None
+    max_tokens: int | None
+    run_max_turns: int | None = None
     # Base model settings mapping (validated against ModelSettings). Optional.
     model_settings: Mapping[str, Any] = field(default_factory=dict)
     # Optional Agent-level knobs
-    tool_use_behavior: Optional[str] = None
-    reset_tool_choice: Optional[bool] = None
+    tool_use_behavior: str | None = None
+    reset_tool_choice: bool | None = None
     # Optional per-attempt overrides (e.g., a "repair" attempt for JSON failures)
-    attempt_overrides: Mapping[str, "AttemptOverride"] = field(default_factory=dict)
+    attempt_overrides: Mapping[str, AttemptOverride] = field(default_factory=dict)
 
     @classmethod
     def from_payload(
         cls, key: str, payload: Mapping[str, Any], base_dir: Path
-    ) -> "AgentSpec":
+    ) -> AgentSpec:
         def str_or_default(value: Any, default: str = "") -> str:
             return default if value is None else str(value)
+
+        instructions_text = ""
+        instructions_path_val = payload.get("instructions_path")
+        if instructions_path_val is not None:
+            instructions_path = Path(str(instructions_path_val))
+            if not instructions_path.is_absolute():
+                instructions_path = base_dir / instructions_path
+            instructions_text = load_markdown(
+                instructions_path,
+                description=f"agents.{key}.instructions_path",
+            )
+        else:
+            instructions_val = payload.get("instructions")
+            if isinstance(instructions_val, (str, bytes)):
+                candidate = Path(str(instructions_val))
+                resolved = None
+                if candidate.is_absolute() and candidate.exists():
+                    resolved = candidate
+                else:
+                    candidate_rel = base_dir / candidate
+                    if candidate_rel.exists():
+                        resolved = candidate_rel
+                if resolved is not None and resolved.is_file():
+                    instructions_text = load_markdown(
+                        resolved,
+                        description=f"agents.{key}.instructions",
+                    )
+                else:
+                    instructions_text = str(instructions_val)
 
         timeout_value = payload.get("timeout")
         timeout_float = (
@@ -390,7 +417,7 @@ class AgentSpec:
             raise ValueError(f"agents.{key}.run_max_turns must be >= 1")
 
         # Attempt override parsing (optional)
-        def _parse_attempt_overrides(raw: Any) -> Mapping[str, "AttemptOverride"]:
+        def _parse_attempt_overrides(raw: Any) -> Mapping[str, AttemptOverride]:
             if raw is None:
                 return {}
             if not isinstance(raw, Mapping):
@@ -404,16 +431,19 @@ class AgentSpec:
                         f"agents.{key}.attempt_overrides.{name} must be a mapping"
                     )
                 prompt_suffix_val = entry.get("prompt_suffix")
-                prompt_suffix: Optional[str] = None
+                prompt_suffix: str | None = None
                 if isinstance(prompt_suffix_val, (str, bytes)):
                     text = str(prompt_suffix_val)
-                    # If this looks like a file path relative to config, load it; otherwise treat
-                    # it as a literal suffix string.
-                    p = Path(text)
-                    if not p.is_absolute():
-                        p = base_dir / p
-                    if p.exists() and p.is_file():
-                        prompt_suffix = p.read_text(encoding="utf-8")
+                    suffix_path = Path(text)
+                    if not suffix_path.is_absolute():
+                        suffix_path = base_dir / suffix_path
+                    if suffix_path.exists() and suffix_path.is_file():
+                        prompt_suffix = load_markdown(
+                            suffix_path,
+                            description=(
+                                f"agents.{key}.attempt_overrides.{name}.prompt_suffix"
+                            ),
+                        )
                     else:
                         prompt_suffix = text
                 model_settings_raw = entry.get("model_settings")
@@ -470,13 +500,13 @@ class AgentSpec:
                 raise ValueError(
                     f"agents.{key}.tool_use_behavior must be 'run_llm_again' or 'stop_on_first_tool'"
                 )
-            tool_use_behavior_out: Optional[str] = str(tool_use_behavior_val)
+            tool_use_behavior_out: str | None = str(tool_use_behavior_val)
         else:
             tool_use_behavior_out = None
 
         reset_tool_choice_val = payload.get("reset_tool_choice")
         if reset_tool_choice_val is None:
-            reset_tool_choice_out: Optional[bool] = None
+            reset_tool_choice_out: bool | None = None
         elif isinstance(reset_tool_choice_val, bool):
             reset_tool_choice_out = reset_tool_choice_val
         else:
@@ -496,10 +526,15 @@ class AgentSpec:
                 f"agents.{key}.model_settings must be a mapping if provided"
             )
 
+        if not instructions_text:
+            raise ValueError(
+                f"agents.{key}.instructions must be provided via instructions_path or literal"
+            )
+
         return cls(
             key=key,
             name=str_or_default(payload.get("name"), key),
-            instructions=str_or_default(payload.get("instructions"), ""),
+            instructions=instructions_text,
             model=str_or_default(payload.get("model"), "gpt-5-nano"),
             reasoning_effort=reasoning_effort_value,
             verbosity=verbosity_value,
@@ -530,7 +565,7 @@ class AttemptOverride:
       this attempt. Unknown keys are rejected during config load.
     """
 
-    prompt_suffix: Optional[str] = None
+    prompt_suffix: str | None = None
     model_settings: Mapping[str, Any] = field(default_factory=dict)
 
 

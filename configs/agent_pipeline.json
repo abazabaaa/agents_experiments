@@ -36,37 +36,36 @@
   "agents": {
     "router": {
       "name": "DocumentRouter",
-      "instructions": "Decide whether the provided document content represents a markdown guide or a Jupyter notebook. Reply with route=markdown if the document is standard markdown prose, or route=notebook if it is a Jupyter notebook (including JSON notebook exports). Explain briefly.",
       "model": "gpt-5-nano",
       "reasoning_effort": "minimal",
       "verbosity": "low",
       "timeout": 180.0,
       "max_tokens": 4096,
-      "run_max_turns": 1
+      "run_max_turns": 1,
+      "instructions_path": "prompts/agents/pipeline/router.md"
     },
     "markdown_cleaner": {
       "name": "MarkdownPolisher",
-      "instructions": "You receive markdown content scraped from documentation. Clean it so it is well formatted markdown with consistent heading levels, fenced code blocks, intact tables, and informative front-matter. Preserve URLs. Remove duplicate navigation chrome. If review_feedback is provided, address it explicitly.",
       "model": "gpt-5",
       "reasoning_effort": "minimal",
       "verbosity": "medium",
       "timeout": 180.0,
       "max_tokens": 50000,
-      "run_max_turns": 1
+      "run_max_turns": 1,
+      "instructions_path": "prompts/agents/pipeline/markdown_cleaner.md"
     },
     "notebook_refactor": {
       "name": "NotebookRefactorer",
-      "instructions": "You transform Jupyter notebook JSON or markdown exports into a standalone Python script. Combine narrative into commented sections, keep code cells executable, and convert markdown explanations into leading comments. Ensure the script runs top-to-bottom. Address review_feedback if present.",
       "model": "gpt-5",
       "reasoning_effort": "high",
       "verbosity": "medium",
       "timeout": 180.0,
       "max_tokens": 50000,
-      "run_max_turns": 2
+      "run_max_turns": 2,
+      "instructions_path": "prompts/agents/pipeline/notebook_refactor.md"
     },
     "reviewer": {
       "name": "QualityReviewer",
-      "instructions": "Review the transformed document to ensure it meets quality expectations. Approve only if the content is cleanly formatted, complete, and faithful to the source intent. Otherwise, reject with actionable feedback.",
       "model": "gpt-5-mini",
       "reasoning_effort": "medium",
       "verbosity": "medium",
@@ -81,17 +80,18 @@
             "verbosity": "low"
           }
         }
-      }
+      },
+      "instructions_path": "prompts/agents/pipeline/reviewer.md"
     },
     "namer": {
       "name": "FileNamer",
-      "instructions": "Given the cleaned content and metadata, propose a concise file slug (kebab-case) and an appropriate extension ('.md' for markdown, '.py' for notebooks). Avoid spaces or special characters. Provide an optional descriptive title.",
       "model": "gpt-5-nano",
       "reasoning_effort": "minimal",
       "verbosity": "low",
       "timeout": 180.0,
       "max_tokens": 4096,
-      "run_max_turns": 1
+      "run_max_turns": 1,
+      "instructions_path": "prompts/agents/pipeline/namer.md"
     }
   }
 }
