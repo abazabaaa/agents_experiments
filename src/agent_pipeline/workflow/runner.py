@@ -5,7 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from pydantic import BaseModel
+
 from agents.result import RunResult
+from agents import ItemHelpers
+from agents.items import (
+    MessageOutputItem,
+    ReasoningItem,
+    ToolCallItem,
+    ToolCallOutputItem,
+)
 
 from ..agents.registry import AgentRegistry
 from ..agents.runconfig import build_run_config
@@ -21,7 +30,9 @@ from ..stages.models import (
     NotebookRefactorResult,
     ReviewResult,
     RoutingDecision,
+    WorkflowNamingResult,
     WorkflowOutput,
+    WorkflowReviewResult,
 )
 from ..stages.types import DocTask
 
@@ -36,6 +47,8 @@ class WorkflowArtifacts:
     review: ReviewResult
     naming: NamingResult
     rework_cycles: int
+    trajectory: list[dict[str, Any]]
+    final_output: dict[str, Any]
 
 
 class WorkflowError(RuntimeError):
@@ -83,13 +96,21 @@ class WorkflowRunner:
             "orchestrator", output_type=WorkflowOutput
         )
 
+        orchestrator_spec = self._config.agent_specs["orchestrator"]
+        tool_descriptions = []
+        for tool_spec in orchestrator_spec.tools:
+            tool_name = tool_spec.tool_name or tool_spec.agent_key
+            tool_descriptions.append(f"{tool_name} ({tool_spec.agent_key})")
+
         builder = ConversationBuilder()
         builder.add_developer(
-            "You orchestrate the document preparation workflow. Use handoffs to specialised agents for routing, transformation, review, and naming."
+            "You orchestrate the document preparation workflow. Use the provided specialist tools for routing, transformation, review, and naming."
         )
-        builder.add_developer(
-            "Available handoffs: router (classification), markdown_cleaner, notebook_refactor, reviewer, namer. Capture outputs before proceeding."
-        )
+        if tool_descriptions:
+            tool_list = ", ".join(tool_descriptions)
+            builder.add_developer(
+                f"Available tools: {tool_list}. Capture each tool's output before proceeding."
+            )
         builder.add_developer(
             f"Do not exceed {self._config.rework_max_cycles} rework cycles. If you reach the limit, return review.approved=false and include the reviewer feedback."
         )
@@ -128,6 +149,8 @@ class WorkflowRunner:
         )
 
         final_output: WorkflowOutput = run_result.final_output
+        trajectory = self._serialize_run_items(run_result)
+        final_output_dict = final_output.model_dump(exclude_none=True)
         naming_extension = final_output.naming.extension
         if not naming_extension.startswith("."):
             naming_extension = f".{naming_extension}"
@@ -150,6 +173,8 @@ class WorkflowRunner:
             review=review_result,
             naming=naming_result,
             rework_cycles=final_output.rework_cycles,
+            trajectory=trajectory,
+            final_output=final_output_dict,
         )
 
     async def _run_manual(self, doc: DocTask) -> WorkflowArtifacts:
@@ -265,6 +290,23 @@ class WorkflowRunner:
                 title=naming_output.title,
             )
 
+        workflow_output = WorkflowOutput(
+            route=route,
+            processed_text=processed_text,
+            summary=summary,
+            review=WorkflowReviewResult(
+                approved=review_result.approved,
+                issues=review_result.issues,
+                suggestions=review_result.suggestions,
+            ),
+            naming=WorkflowNamingResult(
+                file_slug=naming_output.file_slug,
+                extension=naming_output.extension,
+                title=naming_output.title,
+            ),
+            rework_cycles=rework_cycles,
+        )
+
         return WorkflowArtifacts(
             route=route,
             processed_text=processed_text,
@@ -272,7 +314,45 @@ class WorkflowRunner:
             review=review_result,
             naming=naming_output,
             rework_cycles=rework_cycles,
+            trajectory=[],
+            final_output=workflow_output.model_dump(exclude_none=True),
         )
+
+    def _serialize_run_items(self, run_result: RunResult) -> list[dict[str, Any]]:
+        serialized: list[dict[str, Any]] = []
+        for item in getattr(run_result, "new_items", []):
+            entry: dict[str, Any] = {
+                "type": getattr(item, "type", type(item).__name__),
+                "agent": getattr(getattr(item, "agent", None), "name", None),
+            }
+            raw_item = getattr(item, "raw_item", None)
+            entry["raw"] = self._jsonable(raw_item)
+
+            if isinstance(item, MessageOutputItem):
+                entry["role"] = getattr(item.raw_item, "role", None)
+                entry["text"] = ItemHelpers.text_message_output(item)
+
+            if isinstance(item, ToolCallItem):
+                entry["tool_call_type"] = getattr(item.raw_item, "type", None)
+
+            if isinstance(item, ToolCallOutputItem):
+                entry["output"] = self._jsonable(item.output)
+
+            if isinstance(item, ReasoningItem):
+                entry["reasoning"] = self._jsonable(item.raw_item)
+
+            serialized.append(entry)
+        return serialized
+
+    @staticmethod
+    def _jsonable(value: Any) -> Any:
+        if isinstance(value, BaseModel):
+            return value.model_dump(exclude_none=True)
+        if isinstance(value, dict):
+            return {k: WorkflowRunner._jsonable(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [WorkflowRunner._jsonable(v) for v in value]
+        return value
 
     def _initial_conversation(self, doc: DocTask) -> list[dict[str, Any]]:
         builder = ConversationBuilder()

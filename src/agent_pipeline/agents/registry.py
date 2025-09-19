@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping
+import json
 from typing import Any
 
 from agents import Agent
 from agents.model_settings import ModelSettings
 from openai.types.shared import Reasoning
+from pydantic import BaseModel
 
 from ..config import AgentSpec, PipelineConfig
 
@@ -44,13 +46,39 @@ class AgentRegistry:
                 )
             handoff_agents = [self._cache[name] for name in spec.handoffs]
 
+        tool_defs: list[Any] = []
+        if spec.tools:
+            missing_tools = [
+                tool.agent_key
+                for tool in spec.tools
+                if tool.agent_key not in self._cache
+            ]
+            if missing_tools:
+                missing_str = ", ".join(missing_tools)
+                raise ValueError(
+                    f"Agent '{key}' requires tools backed by {missing_str}, but they are not initialised."
+                )
+            for tool_spec in spec.tools:
+                tool_agent = self._cache[tool_spec.agent_key]
+                tool_name = tool_spec.tool_name or tool_spec.agent_key
+                tool_description = (
+                    tool_spec.tool_description
+                    or f"Invoke the {tool_agent.name} agent to perform its task."
+                )
+                tool_defs.append(
+                    tool_agent.as_tool(
+                        tool_name=tool_name,
+                        tool_description=tool_description,
+                    )
+                )
+
         agent = Agent(
             name=spec.name,
             instructions=spec.instructions,
             model=spec.model,
             model_settings=model_settings,
             output_type=output_type,
-            tools=tools or [],
+            tools=(tools or []) + tool_defs,
             mcp_servers=mcp_servers or [],
             tool_use_behavior=(spec.tool_use_behavior or "run_llm_again"),
             reset_tool_choice=(

@@ -14,6 +14,8 @@ class DocTask:
     url: str
     content: str
     metadata: dict[str, Any]
+
+
 @dataclass(slots=True)
 class NamedDoc:
     doc_id: int
@@ -22,6 +24,8 @@ class NamedDoc:
     extension: str
     processed_text: str
     metadata: dict[str, Any]
+    trajectory: list[Any] | None = None
+    final_output: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)

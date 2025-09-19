@@ -102,6 +102,7 @@ class AgentSpecModel(BaseModel):
     reset_tool_choice: bool | None = None
     attempt_overrides: dict[str, AttemptOverrideModel] = Field(default_factory=dict)
     handoffs: list[str] = Field(default_factory=list)
+    tools: list[Any] = Field(default_factory=list)
 
     @field_validator("model_settings")
     @classmethod

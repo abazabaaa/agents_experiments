@@ -1,6 +1,0 @@
-Pipeline log directory: logs/smoke_pipeline-20250918-162954-b01ca7
-Configuration file: configs/smoke_gpt5_nano.json
-OPENAI_CLIENT timeout=connect:5.0s read:Nones write:30.0s pool:5.0s
-Loaded 102 documents from artifacts/lark_docs.json
-SDK_LOG level=DEBUG logger=openai.agents message=DEBUG openai.agents: Shutting down trace provider
-SDK_LOG level=DEBUG logger=openai.agents message=DEBUG openai.agents: Shutting down trace processor <agents.tracing.processors.BatchTraceProcessor object at 0x1084c55e0>

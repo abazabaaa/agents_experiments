@@ -9,16 +9,25 @@ DocTask → WorkflowRunner.process_document → (Orchestrator agent ↔ speciali
 ## Orchestrated path
 
 If the configuration defines an `orchestrator` agent, the workflow delegates the
-entire conversation to that agent. The orchestrator uses handoffs to:
+entire conversation to that agent. The orchestrator keeps control of the
+conversation and invokes specialist tools to:
 
-1. `router` – classify the document as markdown or notebook.
-2. `markdown_cleaner` / `notebook_refactor` – transform the content.
-3. `reviewer` – approve or reject with feedback.
-4. `namer` – produce the final slug and extension.
+1. `route_document` (router) – classify the document as markdown or notebook.
+2. `clean_markdown` / `refactor_notebook` – transform the content.
+3. `review_output` – approve or reject with feedback.
+4. `name_output` – produce the final slug and extension.
 
 The orchestrator returns a `WorkflowOutput` payload summarising route, processed
 text, review result, naming decision, and rework cycles. The pipeline writes the
 resulting `NamedDoc` directly to disk.
+
+### Handling review failures
+
+- When `review.approved` is `false`, the writer now stores the transformed
+  artifact under `output/failures/doc-<id>/` instead of the main output root.
+- Each failure directory contains the generated content plus a
+  `run_details.json` sidecar capturing the orchestrator's final output and a
+  serialized trajectory of tool calls/messages to aid debugging.
 
 ## Manual fallback
 

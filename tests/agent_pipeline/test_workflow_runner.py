@@ -29,6 +29,7 @@ class FakeRunResult:
     def __init__(self, final_output: Any, marker: str) -> None:
         self.final_output = final_output
         self._marker = marker
+        self.new_items: list[Any] = []
 
     def to_input_list(self) -> list[dict[str, str]]:
         return [{"role": "assistant", "content": self._marker}]
@@ -57,10 +58,14 @@ def _build_runner(config: Any, tmp_path: Path) -> WorkflowRunner:
     )
 
 
-def test_workflow_runner_manual_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, smoke_config: Any) -> None:
+def test_workflow_runner_manual_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, smoke_config: Any
+) -> None:
     config = make_manual_config(smoke_config)
     runner = _build_runner(config, tmp_path)
-    doc = DocTask(doc_id=1, url="https://example.com/doc", content="raw document", metadata={})
+    doc = DocTask(
+        doc_id=1, url="https://example.com/doc", content="raw document", metadata={}
+    )
 
     stage_outputs = {
         "routing": [
@@ -71,7 +76,9 @@ def test_workflow_runner_manual_success(monkeypatch: pytest.MonkeyPatch, tmp_pat
         ],
         "markdown": [
             FakeRunResult(
-                MarkdownCleanResult(cleaned_markdown="cleaned markdown", summary="summary"),
+                MarkdownCleanResult(
+                    cleaned_markdown="cleaned markdown", summary="summary"
+                ),
                 "cleaned",
             )
         ],
@@ -89,7 +96,13 @@ def test_workflow_runner_manual_success(monkeypatch: pytest.MonkeyPatch, tmp_pat
         ],
     }
 
-    async def fake_call_agent_with_retry(stage: str, doc_id: int, logger: StructuredLogger, retry_policy: RetryPolicy, attempt):
+    async def fake_call_agent_with_retry(
+        stage: str,
+        doc_id: int,
+        logger: StructuredLogger,
+        retry_policy: RetryPolicy,
+        attempt,
+    ):
         try:
             return stage_outputs[stage].pop(0)
         except (KeyError, IndexError) as exc:  # pragma: no cover
@@ -114,13 +127,19 @@ def test_workflow_runner_manual_success(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert artifacts.review.approved is True
     assert artifacts.naming.extension == ".md"
     assert artifacts.rework_cycles == 0
+    assert artifacts.trajectory == []
+    assert artifacts.final_output["route"] == "markdown"
     assert all(not outputs for outputs in stage_outputs.values())
 
 
-def test_workflow_runner_manual_rework_cycle(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, smoke_config: Any) -> None:
+def test_workflow_runner_manual_rework_cycle(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, smoke_config: Any
+) -> None:
     config = make_manual_config(smoke_config)
     runner = _build_runner(config, tmp_path)
-    doc = DocTask(doc_id=2, url="https://example.com/rework", content="raw", metadata={})
+    doc = DocTask(
+        doc_id=2, url="https://example.com/rework", content="raw", metadata={}
+    )
 
     stage_outputs = {
         "routing": [
@@ -161,7 +180,13 @@ def test_workflow_runner_manual_rework_cycle(monkeypatch: pytest.MonkeyPatch, tm
         ],
     }
 
-    async def fake_call_agent_with_retry(stage: str, doc_id: int, logger: StructuredLogger, retry_policy: RetryPolicy, attempt):
+    async def fake_call_agent_with_retry(
+        stage: str,
+        doc_id: int,
+        logger: StructuredLogger,
+        retry_policy: RetryPolicy,
+        attempt,
+    ):
         try:
             return stage_outputs[stage].pop(0)
         except (KeyError, IndexError) as exc:  # pragma: no cover
@@ -184,10 +209,14 @@ def test_workflow_runner_manual_rework_cycle(monkeypatch: pytest.MonkeyPatch, tm
     assert artifacts.summary == "final summary"
     assert artifacts.review.approved is True
     assert artifacts.rework_cycles == 1
+    assert artifacts.trajectory == []
+    assert artifacts.final_output["rework_cycles"] == 1
     assert all(not outputs for outputs in stage_outputs.values())
 
 
-def test_workflow_runner_orchestrator(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, smoke_config: Any) -> None:
+def test_workflow_runner_orchestrator(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, smoke_config: Any
+) -> None:
     runner = _build_runner(smoke_config, tmp_path)
     doc = DocTask(doc_id=3, url="https://example.com/orch", content="raw", metadata={})
 
@@ -214,7 +243,9 @@ def test_workflow_runner_orchestrator(monkeypatch: pytest.MonkeyPatch, tmp_path:
         return FakeRunResult(final_output, "orchestrated")
 
     async def fail_call_agent_with_retry(*args, **kwargs):  # pragma: no cover
-        raise AssertionError("manual runner should not invoke call_agent_with_retry in orchestrator mode")
+        raise AssertionError(
+            "manual runner should not invoke call_agent_with_retry in orchestrator mode"
+        )
 
     monkeypatch.setattr("agent_pipeline.workflow.runner.call_agent", fake_call_agent)
     monkeypatch.setattr(
@@ -231,6 +262,7 @@ def test_workflow_runner_orchestrator(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert artifacts.naming.extension == ".md"
     assert artifacts.review.approved is True
     assert artifacts.rework_cycles == 0
+    assert artifacts.final_output["naming"]["file_slug"] == "orch-doc"
 
 
 def test_load_config_missing_instructions(tmp_path: Path) -> None:

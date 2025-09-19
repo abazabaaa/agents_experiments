@@ -149,6 +149,8 @@ class Pipeline:
                     extension=artifacts.naming.extension,
                     processed_text=artifacts.processed_text,
                     metadata=metadata,
+                    trajectory=artifacts.trajectory,
+                    final_output=artifacts.final_output,
                 )
                 self.logger.verbose(
                     "WORKFLOW_RESULT "

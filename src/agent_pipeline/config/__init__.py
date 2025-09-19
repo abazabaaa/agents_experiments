@@ -336,6 +336,15 @@ class PipelineConfig:
 
 
 @dataclass(slots=True)
+class AgentToolSpec:
+    """Configuration for exposing another agent as a tool."""
+
+    agent_key: str
+    tool_name: str | None = None
+    tool_description: str | None = None
+
+
+@dataclass(slots=True)
 class AgentSpec:
     """Configuration for a single agent stage."""
 
@@ -349,6 +358,7 @@ class AgentSpec:
     max_tokens: int | None
     run_max_turns: int | None = None
     handoffs: tuple[str, ...] = ()
+    tools: tuple[AgentToolSpec, ...] = ()
     # Base model settings mapping (validated against ModelSettings). Optional.
     model_settings: Mapping[str, Any] = field(default_factory=dict)
     # Optional Agent-level knobs
@@ -544,6 +554,41 @@ class AgentSpec:
                 f"agents.{key}.handoffs must be a list of agent keys if provided"
             )
 
+        tools_raw = payload.get("tools")
+
+        def _parse_tool_entry(entry: Any) -> AgentToolSpec:
+            if isinstance(entry, str):
+                return AgentToolSpec(agent_key=str(entry))
+            if not isinstance(entry, Mapping):
+                raise TypeError(
+                    f"agents.{key}.tools entries must be strings or mappings; received {type(entry)!r}"
+                )
+            agent_value = entry.get("agent")
+            if not isinstance(agent_value, str):
+                raise TypeError(
+                    f"agents.{key}.tools entries must include an 'agent' string key"
+                )
+            tool_name_val = entry.get("tool_name")
+            tool_desc_val = entry.get("description") or entry.get("tool_description")
+            tool_name = (
+                str(tool_name_val) if isinstance(tool_name_val, (str, bytes)) else None
+            )
+            tool_description = (
+                str(tool_desc_val) if isinstance(tool_desc_val, (str, bytes)) else None
+            )
+            return AgentToolSpec(
+                agent_key=str(agent_value),
+                tool_name=tool_name,
+                tool_description=tool_description,
+            )
+
+        if tools_raw is None:
+            tools_tuple: tuple[AgentToolSpec, ...] = ()
+        elif isinstance(tools_raw, list):
+            tools_tuple = tuple(_parse_tool_entry(item) for item in tools_raw)
+        else:
+            raise TypeError(f"agents.{key}.tools must be a list when provided")
+
         return cls(
             key=key,
             name=str_or_default(payload.get("name"), key),
@@ -555,6 +600,7 @@ class AgentSpec:
             max_tokens=max_tokens_int,
             run_max_turns=run_max_turns_int,
             handoffs=handoffs_tuple,
+            tools=tools_tuple,
             model_settings=model_settings_out,
             tool_use_behavior=tool_use_behavior_out,
             reset_tool_choice=reset_tool_choice_out,

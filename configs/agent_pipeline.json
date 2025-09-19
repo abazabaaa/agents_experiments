@@ -102,12 +102,32 @@
       "timeout": 240.0,
       "max_tokens": 8192,
       "run_max_turns": 12,
-      "handoffs": [
-        "router",
-        "markdown_cleaner",
-        "notebook_refactor",
-        "reviewer",
-        "namer"
+      "tools": [
+        {
+          "agent": "router",
+          "tool_name": "route_document",
+          "description": "Classify the document as markdown or notebook."
+        },
+        {
+          "agent": "markdown_cleaner",
+          "tool_name": "clean_markdown",
+          "description": "Transform markdown content and summarise key changes."
+        },
+        {
+          "agent": "notebook_refactor",
+          "tool_name": "refactor_notebook",
+          "description": "Convert notebooks to Python scripts and provide an optional summary."
+        },
+        {
+          "agent": "reviewer",
+          "tool_name": "review_output",
+          "description": "Assess quality, returning approval status, issues, and suggestions."
+        },
+        {
+          "agent": "namer",
+          "tool_name": "name_output",
+          "description": "Provide the output slug, extension, and optional title."
+        }
       ]
     }
   }
