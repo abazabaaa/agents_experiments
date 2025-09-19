@@ -105,8 +105,29 @@ class Pipeline:
 
         finally:
             if self._openai_client is not None:
-                # Bridge asyncio-based close() into Trio using trio-asyncio.
-                await trio_asyncio.aio_as_trio(self._openai_client.close)()
+                try:
+                    # Bridge asyncio-based close() into Trio using trio-asyncio.
+                    await trio_asyncio.aio_as_trio(self._openai_client.close)()
+                except RuntimeError as exc:
+                    if "Event loop is closed" in str(exc):
+                        self.logger.debug(
+                            "OPENAI_CLIENT close skipped: asyncio loop already closed"
+                        )
+                    else:  # pragma: no cover - unexpected runtime failure
+                        raise
+                except BaseExceptionGroup as exc_group:  # pragma: no cover - defensive
+                    remaining: list[BaseException] = []
+                    for exc in exc_group.exceptions:
+                        if isinstance(exc, RuntimeError) and "Event loop is closed" in str(exc):
+                            self.logger.debug(
+                                "OPENAI_CLIENT close skipped: asyncio loop already closed"
+                            )
+                        else:
+                            remaining.append(exc)
+                    if remaining:
+                        raise BaseExceptionGroup(
+                            "Failed to close OpenAI client", remaining
+                        ) from None
 
         if self.failures:
             self.logger.info(f"Failures encountered: {len(self.failures)}")
@@ -125,40 +146,42 @@ class Pipeline:
     ) -> None:
         async with semaphore:
             try:
-                artifacts = await workflow_runner.process_document(doc)
-            except WorkflowError as exc:
-                await self._record_failure(doc.doc_id, doc.url, "workflow", exc)
-            except Exception as exc:  # noqa: BLE001
-                await self._record_failure(doc.doc_id, doc.url, "workflow", exc)
-            else:
-                metadata = dict(doc.metadata)
-                metadata.update(
-                    {
-                        "route": artifacts.route,
-                        "summary": artifacts.summary,
-                        "review_approved": artifacts.review.approved,
-                        "review_issues": artifacts.review.issues,
-                        "review_suggestions": artifacts.review.suggestions,
-                        "rework_cycles": artifacts.rework_cycles,
-                    }
-                )
-                named_doc = NamedDoc(
-                    doc_id=doc.doc_id,
-                    url=doc.url,
-                    file_slug=artifacts.naming.file_slug,
-                    extension=artifacts.naming.extension,
-                    processed_text=artifacts.processed_text,
-                    metadata=metadata,
-                    trajectory=artifacts.trajectory,
-                    final_output=artifacts.final_output,
-                )
-                self.logger.verbose(
-                    "WORKFLOW_RESULT "
-                    f"doc={doc.doc_id} url={doc.url} route={artifacts.route} "
-                    f"slug={artifacts.naming.file_slug}{artifacts.naming.extension} "
-                    f"approved={artifacts.review.approved} rework_cycles={artifacts.rework_cycles}"
-                )
-                await write_send.send(named_doc)
+                async with write_send:
+                    try:
+                        artifacts = await workflow_runner.process_document(doc)
+                    except WorkflowError as exc:
+                        await self._record_failure(doc.doc_id, doc.url, "workflow", exc)
+                    except Exception as exc:  # noqa: BLE001
+                        await self._record_failure(doc.doc_id, doc.url, "workflow", exc)
+                    else:
+                        metadata = dict(doc.metadata)
+                        metadata.update(
+                            {
+                                "route": artifacts.route,
+                                "summary": artifacts.summary,
+                                "review_approved": artifacts.review.approved,
+                                "review_issues": artifacts.review.issues,
+                                "review_suggestions": artifacts.review.suggestions,
+                                "rework_cycles": artifacts.rework_cycles,
+                            }
+                        )
+                        named_doc = NamedDoc(
+                            doc_id=doc.doc_id,
+                            url=doc.url,
+                            file_slug=artifacts.naming.file_slug,
+                            extension=artifacts.naming.extension,
+                            processed_text=artifacts.processed_text,
+                            metadata=metadata,
+                            trajectory=artifacts.trajectory,
+                            final_output=artifacts.final_output,
+                        )
+                        self.logger.verbose(
+                            "WORKFLOW_RESULT "
+                            f"doc={doc.doc_id} url={doc.url} route={artifacts.route} "
+                            f"slug={artifacts.naming.file_slug}{artifacts.naming.extension} "
+                            f"approved={artifacts.review.approved} rework_cycles={artifacts.rework_cycles}"
+                        )
+                        await write_send.send(named_doc)
             finally:
                 await completion_counter.increment()
 

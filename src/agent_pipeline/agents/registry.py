@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping
-import json
 from typing import Any
 
 from agents import Agent
 from agents.model_settings import ModelSettings
 from openai.types.shared import Reasoning
-from pydantic import BaseModel
 
 from ..config import AgentSpec, PipelineConfig
 

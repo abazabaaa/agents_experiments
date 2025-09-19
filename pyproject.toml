@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
     "openai-agents>=0.3.0",
+    "python-dotenv>=1.1.1",
     "ruff>=0.13.0",
     "trio>=0.31.0",
     "trio-asyncio>=0.15.0",

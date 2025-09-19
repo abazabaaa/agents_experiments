@@ -10,8 +10,7 @@ from agents import Agent
 from agents.exceptions import MaxTurnsExceeded
 from agents.run import RunConfig
 
-from ..bridge.asyncio import run_agent as run_agent_asyncio
-from ..bridge.asyncio import run_agent_streamed
+from ..bridge.asyncio import run_agent as run_agent_asyncio, run_agent_streamed
 from ..config import RetryPolicy
 from ..constants import DEFAULT_AGENT_TIMEOUT
 from ..conversation import AgentInput, ensure_conversation
