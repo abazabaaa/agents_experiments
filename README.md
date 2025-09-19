@@ -97,3 +97,27 @@ unexpected agent behaviour.
 
 Contributions should follow the existing patterns—small, well-tested changes
 with clear logs make it easier to analyze complex agent interactions.
+
+## Trio / trio-asyncio Notes
+
+Working inside Trio with embedded asyncio loops surfaced a few important lessons. Future changes should keep these in mind:
+
+- **Always contain asyncio in `trio_asyncio.open_loop()`.** Every call into `Runner.run()` lives inside an `async with trio_asyncio.open_loop()` block. Never reuse the same asyncio loop across documents—let the context manager create and destroy it each time so Trio can shut down cleanly.
+
+- **AsyncIO clients must tolerate loop re-creation.** Long-lived transports (HTTP keep-alives, background tasks) can outlive the `open_loop()` that created them. The custom `AsyncOpenAI` client disables HTTP keep-alives and retries cleanly so that closing one loop doesn’t break the next request.
+
+- **Use Trio primitives for coordination.** Nested `asyncio.sleep` or bare `asyncio` constructs can starve the scheduler. Lean on Trio’s `Semaphore`, `move_on_after`, and queues to avoid hung tasks.
+
+- **Always check `Cancelled` paths.** Trio cancellation propagates aggressively. Every async `with` and `await` that might be cancelled should either clean up explicitly or allow the exception to bubble—otherwise tasks remain stuck, preventing the nursery from closing.
+
+- **Respect structured concurrency.** All pipelines run inside a top-level nursery opened in `Pipeline.run`. New tasks should be spawned with `nursery.start_soon()`, and long-running operations must keep yielding checkpoints so the nursery can exit.
+
+- **Logging/tracing should avoid blocking Trio.** The SDK loggers write to disk via simple handlers. If we ever add custom hooks, they must avoid synchronous I/O inside Trio tasks—use `trio.to_thread` if the work takes significant time.
+
+- **Don’t mix Trio and asyncio event loops directly.** Creating tasks with `asyncio.create_task` inside Trio code leads to orphaned tasks when the loop shuts down. Always stay within trio-asyncio wrappers (`aio_as_trio`, `trio_as_aio`) when crossing boundaries.
+
+- **Set explicit HTTP timeouts.** Trio’s cooperative scheduler means a hung request blocks everything. Keep `Timeout` values realistic and log them so you can see when a transport is stalled.
+
+- **Flush diagnostics on shutdown.** Trio will exit nurseries before `atexit` callbacks run. Our tracing/logging setup removes handlers and closes the queue in the `_cleanup` hook so the next run starts from a clean state.
+
+Capturing these guardrails here should save future engineers the time we spent discovering them the hard way.
