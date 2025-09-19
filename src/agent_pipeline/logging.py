@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,24 @@ class StructuredLogger:
                 print()
             print(formatted)
         self._write_verbose(formatted)
+
+    def warning(self, message: str) -> None:
+        """Log a warning message."""
+        formatted = f"WARNING: {message.rstrip()}"
+        if not self.quiet:
+            print(formatted)
+        self._write_verbose(formatted)
+
+    def error(self, message: str) -> None:
+        """Log an error message."""
+        formatted = f"ERROR: {message.rstrip()}"
+        if not self.quiet:
+            print(formatted)
+        self._write_verbose(formatted)
+
+    def debug(self, message: str) -> None:
+        """Log a debug message (verbose only)."""
+        self._write_verbose(f"DEBUG: {message.rstrip()}")
 
     def blank_line(self) -> None:
         if not self.quiet:
@@ -99,10 +118,12 @@ class AgentCallContext:
 
 
 class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
-    """Log lifecycle events for Agents SDK runs."""
+    """Log lifecycle events for Agents SDK runs with enhanced timing metrics."""
 
     def __init__(self, context: AgentCallContext) -> None:
         self._context = context
+        self._timers: dict[str, float] = {}
+        self._turn_count = 0
 
     def _ensure_context(
         self, wrapper: RunContextWrapper[AgentCallContext]
@@ -118,8 +139,13 @@ class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
         agent: Agent[AgentCallContext],
     ) -> None:
         ctx = self._ensure_context(context)
+        # Track agent start time
+        self._timers["agent_start"] = time.perf_counter()
+        self._turn_count = 0
+
         ctx.logger.verbose(
-            f"AGENT_EVENT event=agent_start stage={ctx.stage} run={ctx.run_id} trace={ctx.trace_id} agent={agent.name} doc={ctx.doc_url}"
+            f"AGENT_EVENT event=agent_start stage={ctx.stage} run={ctx.run_id} "
+            f"trace={ctx.trace_id} agent={agent.name} doc={ctx.doc_url}"
         )
 
     async def on_agent_end(
@@ -130,6 +156,17 @@ class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
     ) -> None:
         ctx = self._ensure_context(context)
         usage = context.usage
+
+        # Calculate total agent execution time
+        if "agent_start" in self._timers:
+            duration = time.perf_counter() - self._timers["agent_start"]
+            ctx.logger.info(
+                f"AGENT_METRICS agent={agent.name} stage={ctx.stage} "
+                f"duration={duration:.2f}s turns={self._turn_count} "
+                f"requests={usage.requests} input_tokens={usage.input_tokens} "
+                f"output_tokens={usage.output_tokens}"
+            )
+
         ctx.logger.verbose(
             " ".join(
                 part
@@ -156,8 +193,14 @@ class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
         input_items: list[Any],
     ) -> None:
         ctx = self._ensure_context(context)
+        # Track LLM call start
+        self._timers["llm_start"] = time.perf_counter()
+        self._turn_count += 1
+
         ctx.logger.verbose(
-            f"AGENT_EVENT event=llm_start stage={ctx.stage} run={ctx.run_id} trace={ctx.trace_id} agent={agent.name} doc={ctx.doc_url} items={len(input_items)}"
+            f"AGENT_EVENT event=llm_start stage={ctx.stage} run={ctx.run_id} "
+            f"trace={ctx.trace_id} agent={agent.name} doc={ctx.doc_url} "
+            f"items={len(input_items)} turn={self._turn_count}"
         )
 
     async def on_llm_end(
@@ -167,8 +210,23 @@ class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
         response: Any,
     ) -> None:
         ctx = self._ensure_context(context)
+
+        # Calculate LLM response time
+        if "llm_start" in self._timers:
+            duration = time.perf_counter() - self._timers["llm_start"]
+            ctx.logger.verbose(
+                f"LLM_METRICS agent={agent.name} stage={ctx.stage} "
+                f"duration={duration:.2f}s turn={self._turn_count}"
+            )
+            # Warn if LLM call is slow
+            if duration > 30.0:
+                ctx.logger.warning(
+                    f"Slow LLM response: agent={agent.name} took {duration:.2f}s"
+                )
+
         ctx.logger.verbose(
-            f"AGENT_EVENT event=llm_end stage={ctx.stage} run={ctx.run_id} trace={ctx.trace_id} agent={agent.name} doc={ctx.doc_url}"
+            f"AGENT_EVENT event=llm_end stage={ctx.stage} run={ctx.run_id} "
+            f"trace={ctx.trace_id} agent={agent.name} doc={ctx.doc_url}"
         )
 
     async def on_tool_start(
@@ -178,8 +236,15 @@ class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
         tool: Any,
     ) -> None:
         ctx = self._ensure_context(context)
+        tool_name = getattr(tool, "name", "unknown")
+
+        # Track tool execution start
+        self._timers[f"tool_{tool_name}"] = time.perf_counter()
+
         ctx.logger.verbose(
-            f"AGENT_EVENT event=tool_start stage={ctx.stage} run={ctx.run_id} trace={ctx.trace_id} agent={agent.name} doc={ctx.doc_url} tool={getattr(tool, 'name', None)}"
+            f"AGENT_EVENT event=tool_start stage={ctx.stage} run={ctx.run_id} "
+            f"trace={ctx.trace_id} agent={agent.name} doc={ctx.doc_url} "
+            f"tool={tool_name}"
         )
 
     async def on_tool_end(
@@ -190,8 +255,32 @@ class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
         result: Any,
     ) -> None:
         ctx = self._ensure_context(context)
+        tool_name = getattr(tool, "name", "unknown")
+
+        # Calculate tool execution time
+        timer_key = f"tool_{tool_name}"
+        if timer_key in self._timers:
+            duration = time.perf_counter() - self._timers[timer_key]
+            ctx.logger.verbose(
+                f"TOOL_METRICS agent={agent.name} tool={tool_name} "
+                f"stage={ctx.stage} duration={duration:.2f}s"
+            )
+            # Warn if tool execution is slow
+            if duration > 60.0:
+                ctx.logger.warning(
+                    f"Slow tool execution: {tool_name} took {duration:.2f}s"
+                )
+
+        # Abbreviate result for logging
+        result_str = str(result)
+        result_abbrev = (
+            result_str[:100] + "..." if len(result_str) > 100 else result_str
+        )
+
         ctx.logger.verbose(
-            f"AGENT_EVENT event=tool_end stage={ctx.stage} run={ctx.run_id} trace={ctx.trace_id} agent={agent.name} doc={ctx.doc_url} tool={getattr(tool, 'name', None)} result={result}"
+            f"AGENT_EVENT event=tool_end stage={ctx.stage} run={ctx.run_id} "
+            f"trace={ctx.trace_id} agent={agent.name} doc={ctx.doc_url} "
+            f"tool={tool_name} result={result_abbrev}"
         )
 
     async def on_handoff(
@@ -202,5 +291,7 @@ class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
     ) -> None:
         ctx = self._ensure_context(context)
         ctx.logger.verbose(
-            f"AGENT_EVENT event=handoff stage={ctx.stage} run={ctx.run_id} trace={ctx.trace_id} from={from_agent.name} to={to_agent.name} doc={ctx.doc_url}"
+            f"AGENT_EVENT event=handoff stage={ctx.stage} run={ctx.run_id} "
+            f"trace={ctx.trace_id} from={from_agent.name} to={to_agent.name} "
+            f"doc={ctx.doc_url}"
         )

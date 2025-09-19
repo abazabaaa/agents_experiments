@@ -5,9 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from pydantic import BaseModel
-
-from agents.result import RunResult
 from agents import ItemHelpers
 from agents.items import (
     MessageOutputItem,
@@ -15,6 +12,8 @@ from agents.items import (
     ToolCallItem,
     ToolCallOutputItem,
 )
+from agents.result import RunResult
+from pydantic import BaseModel
 
 from ..agents.registry import AgentRegistry
 from ..agents.runconfig import build_run_config
