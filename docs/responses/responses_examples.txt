@@ -1,0 +1,154 @@
+# OpenAI Agents SDK Responses Examples Index
+
+## Package scaffolding
+- docs/openai-agents-sdk/examples/__init__.py — Marks the examples tree as a package so each scenario can be imported without module name collisions when running tools like mypy; useful when exploring how presets are wired together.
+
+## agent_patterns presets
+- docs/openai-agents-sdk/examples/agent_patterns/README.md — Narrative guide to common orchestration patterns (deterministic flows, routing, tools-as-agents, LLM-as-judge, parallelism, guardrails) showcased by the scripts in this folder.
+- docs/openai-agents-sdk/examples/agent_patterns/deterministic.py — Runs a three-stage deterministic pipeline using typed outputs and assertion gates to decide whether to continue, illustrating linear workflows with `trace` grouping.
+- docs/openai-agents-sdk/examples/agent_patterns/agents_as_tools.py — Shows the agents-as-tools pattern where an orchestrator invokes translation agents via `.as_tool()` and a synthesizer collates outputs, including inspection of streamed items.
+- docs/openai-agents-sdk/examples/agent_patterns/agents_as_tools_conditional.py — Demonstrates conditional tool availability by wiring `is_enabled` callbacks against a contextual preference model, then running the orchestrator within a traced session.
+- docs/openai-agents-sdk/examples/agent_patterns/forcing_tool_use.py — Covers tool forcing via `ModelSettings(tool_choice="required")`, custom tool-use behaviors, and handling tool outputs as final responses with optional custom reducer logic.
+- docs/openai-agents-sdk/examples/agent_patterns/input_guardrails.py — Implements an input guardrail using an agent-based checker and trips on math-homework requests, illustrating `InputGuardrailTripwireTriggered` handling and guardrail-trigger recovery.
+- docs/openai-agents-sdk/examples/agent_patterns/output_guardrails.py — Shows output guardrails that inspect structured responses for sensitive data (phone numbers) and raise tripwire exceptions mid run.
+- docs/openai-agents-sdk/examples/agent_patterns/parallelization.py — Runs three translations concurrently with `asyncio.gather` then uses a picker agent to select the best result, demonstrating simple parallel fan-out/fan-in patterns.
+- docs/openai-agents-sdk/examples/agent_patterns/routing.py — Streaming routing demo where a triage agent hands off to language specialists while emitting raw streaming events for UI updates.
+- docs/openai-agents-sdk/examples/agent_patterns/streaming_guardrails.py — Periodically runs a readability guardrail on partially streamed output using custom scheduling to terminate early when needed.
+- docs/openai-agents-sdk/examples/agent_patterns/llm_as_a_judge.py — Iterative improvement loop where a judge agent provides feedback scores until the outline passes, highlighting evaluation feedback cycles.
+
+## basic building blocks
+- docs/openai-agents-sdk/examples/basic/agent_lifecycle_example.py — Demonstrates per-agent lifecycle hooks logging start/end/tool events plus handoffs within a multi-agent flow.
+- docs/openai-agents-sdk/examples/basic/dynamic_system_prompt.py — Shows dynamic system prompts derived from runtime context via a callable instructions function.
+- docs/openai-agents-sdk/examples/basic/hello_world.py — Minimal synchronous agent invocation producing a haiku response.
+- docs/openai-agents-sdk/examples/basic/hello_world_gpt_5.py — Configures GPT-5 with reasoning and verbosity settings for a simple run, including commented chat-completions model wiring.
+- docs/openai-agents-sdk/examples/basic/hello_world_gpt_oss.py — Runs a local GPT-OSS deployment via `OpenAIChatCompletionsModel` and disables tracing to suit non-OpenAI hosts.
+- docs/openai-agents-sdk/examples/basic/lifecycle_example.py — Uses global run hooks to observe agent/LLM/tool lifecycle and aggregate usage metrics across handoffs.
+- docs/openai-agents-sdk/examples/basic/local_file.py — Sends a base64-encoded local PDF via `input_file` content then queries it, illustrating multimodal file ingestion.
+- docs/openai-agents-sdk/examples/basic/local_image.py — Encodes a local JPEG into base64 `input_image` content and queries the model about it.
+- docs/openai-agents-sdk/examples/basic/remote_image.py — Fetches insights about a remote image using direct URL-based `input_image` content.
+- docs/openai-agents-sdk/examples/basic/remote_pdf.py — Summarizes a remote PDF by passing an `input_file` URL alongside a follow-up question.
+- docs/openai-agents-sdk/examples/basic/non_strict_output_type.py — Explores non-strict JSON schemas and custom output validators while toggling strictness on a dataclass output type.
+- docs/openai-agents-sdk/examples/basic/previous_response_id.py — Illustrates how to continue conversations using `previous_response_id` in blocking and streamed runs.
+- docs/openai-agents-sdk/examples/basic/prompt_template.py — Fetches static or dynamic prompt templates (including variable injection) from the Prompt Library before running an agent.
+- docs/openai-agents-sdk/examples/basic/stream_function_call_args.py — Streams function-call arguments from responses in real time while tracking active tool invocations.
+- docs/openai-agents-sdk/examples/basic/stream_items.py — Consumes structured stream events for tool calls, outputs, and agent updates during a run.
+- docs/openai-agents-sdk/examples/basic/stream_text.py — Minimal text streaming example filtering `ResponseTextDeltaEvent` tokens.
+- docs/openai-agents-sdk/examples/basic/tools.py — Simple function-tool wiring returning a Pydantic `Weather` model and running once.
+- docs/openai-agents-sdk/examples/basic/usage_tracking.py — Captures aggregated token usage from a run context and prints it alongside the result.
+- docs/openai-agents-sdk/examples/basic/hello_world_jupyter.ipynb — Notebook adaptation of the hello world walkthrough for interactive experimentation with agents (open in Jupyter to inspect code cells).
+- docs/openai-agents-sdk/examples/basic/media/image_bison.jpg — Sample image asset consumed by `local_image.py` when demonstrating base64 image uploads.
+- docs/openai-agents-sdk/examples/basic/media/partial_o3-and-o4-mini-system-card.pdf — Sample PDF referenced by `local_file.py` for multimodal document querying.
+
+## customer_service workflow
+- docs/openai-agents-sdk/examples/customer_service/main.py — Multi-agent airline support workflow with contextual state, approval hooks, tool usage, and handoffs traced across conversation turns.
+
+## financial_research_agent
+- docs/openai-agents-sdk/examples/financial_research_agent/README.md — High-level walkthrough of planner/search/analyst/writer/verifier pipeline for financial reports.
+- docs/openai-agents-sdk/examples/financial_research_agent/__init__.py — Empty package marker enabling module imports for composite example.
+- docs/openai-agents-sdk/examples/financial_research_agent/main.py — CLI entry point that instantiates the manager and runs the end-to-end research workflow.
+- docs/openai-agents-sdk/examples/financial_research_agent/manager.py — Orchestrates planning, asynchronous searches, tool-enabled writing, and verification while streaming progress to a rich console and generating traces.
+- docs/openai-agents-sdk/examples/financial_research_agent/printer.py — Utility for streaming spinner/complete status messages to the terminal using Rich live updates.
+- docs/openai-agents-sdk/examples/financial_research_agent/agents/__init__.py — Package marker for agent definitions (empty file).
+- docs/openai-agents-sdk/examples/financial_research_agent/agents/planner_agent.py — Defines the planning agent producing structured `FinancialSearchPlan` objects using o3 planning.
+- docs/openai-agents-sdk/examples/financial_research_agent/agents/search_agent.py — Configures a web-search agent with required tool use to gather financial snippets.
+- docs/openai-agents-sdk/examples/financial_research_agent/agents/financials_agent.py — Specialist fundamentals analyst returning concise analysis summaries for writer tooling.
+- docs/openai-agents-sdk/examples/financial_research_agent/agents/risk_agent.py — Risk analyst sub-agent highlighting red flags via structured `AnalysisSummary` output.
+- docs/openai-agents-sdk/examples/financial_research_agent/agents/writer_agent.py — Writer agent template producing markdown reports, summaries, and follow-up questions, later extended with specialist tools.
+- docs/openai-agents-sdk/examples/financial_research_agent/agents/verifier_agent.py — Verification agent auditing the final report for consistency issues.
+
+## handoffs utilities
+- docs/openai-agents-sdk/examples/handoffs/message_filter.py — Demonstrates pre-handoff message filtering, tool removal, and selective history trimming before delegating to a Spanish agent.
+- docs/openai-agents-sdk/examples/handoffs/message_filter_streaming.py — Streaming variant showing the same input filtering while consuming streamed results and printing final history.
+
+## hosted MCP integrations
+- docs/openai-agents-sdk/examples/hosted_mcp/__init__.py — Package marker for hosted MCP scenarios (empty).
+- docs/openai-agents-sdk/examples/hosted_mcp/simple.py — Uses `HostedMCPTool` with `require_approval="never"` to call OpenAI-hosted MCP tools, with optional streaming inspection.
+- docs/openai-agents-sdk/examples/hosted_mcp/approvals.py — Adds an approval callback responding to hosted MCP tool requests before execution.
+- docs/openai-agents-sdk/examples/hosted_mcp/connectors.py — Connects to the Google Calendar connector via Hosted MCP, forward-authing with OAuth tokens, and optionally streams tool call events.
+
+## memory backends
+- docs/openai-agents-sdk/examples/memory/openai_session_example.py — Uses `OpenAIConversationsSession` to persist conversation state and demonstrates fetching recent history slices.
+- docs/openai-agents-sdk/examples/memory/sqlite_session_example.py — Persists dialogue to a local SQLite file via `SQLiteSession` and shows history queries.
+- docs/openai-agents-sdk/examples/memory/sqlalchemy_session_example.py — Backs sessions with SQLAlchemy (async SQLite) demonstrating table creation and typed retrieval.
+- docs/openai-agents-sdk/examples/memory/encrypted_session_example.py — Wraps a `SQLiteSession` with `EncryptedSession`, enabling TTL, encrypted storage, and decrypted reads, plus inspection of raw encrypted payloads.
+
+## MCP servers and clients
+- docs/openai-agents-sdk/examples/mcp/filesystem_example/README.md — Explains launching the filesystem MCP server via `npx` and wiring it to an agent.
+- docs/openai-agents-sdk/examples/mcp/filesystem_example/main.py — Spins up `MCPServerStdio`, traces runs, and queries sample files via MCP tools.
+- docs/openai-agents-sdk/examples/mcp/filesystem_example/sample_files/favorite_books.txt — Sample corpus used by the filesystem server for reading tasks.
+- docs/openai-agents-sdk/examples/mcp/filesystem_example/sample_files/favorite_cities.txt — Additional sample data for location queries in the filesystem MCP demo.
+- docs/openai-agents-sdk/examples/mcp/filesystem_example/sample_files/favorite_songs.txt — Song list consumed by the filesystem MCP example when suggesting recommendations.
+- docs/openai-agents-sdk/examples/mcp/git_example/README.md — Documents running the Git MCP server via `uvx` and expected tooling.
+- docs/openai-agents-sdk/examples/mcp/git_example/main.py — Accepts a repo path, starts `MCPServerStdio` with git, and queries contributors/last change via MCP tools.
+- docs/openai-agents-sdk/examples/mcp/prompt_server/README.md — Describes a streamable HTTP prompt server for generating agent instructions dynamically.
+- docs/openai-agents-sdk/examples/mcp/prompt_server/main.py — Boots a custom prompt MCP server, lists prompts, fetches prompt-generated instructions, and runs a code-review agent using them.
+- docs/openai-agents-sdk/examples/mcp/prompt_server/server.py — Implements the FastMCP prompt server exposing prompt endpoints such as `generate_code_review_instructions`.
+- docs/openai-agents-sdk/examples/mcp/sse_example/README.md — Overview of the SSE MCP demo pipeline.
+- docs/openai-agents-sdk/examples/mcp/sse_example/main.py — Launches an SSE MCP server, enforces tool usage, and executes arithmetic/weather/secret-word tools.
+- docs/openai-agents-sdk/examples/mcp/sse_example/server.py — Defines the FastMCP SSE server with simple arithmetic, weather, and secret word tools.
+- docs/openai-agents-sdk/examples/mcp/streamablehttp_example/README.md — Introduces the streamable HTTP MCP example server.
+- docs/openai-agents-sdk/examples/mcp/streamablehttp_example/main.py — Runs a streamable HTTP MCP server and exercises math/weather/secret word tools with required tool usage.
+- docs/openai-agents-sdk/examples/mcp/streamablehttp_example/server.py — Provides the FastMCP streamable HTTP server implementation mirroring the SSE toolset.
+
+## model_providers integrations
+- docs/openai-agents-sdk/examples/model_providers/README.md — Setup instructions for pointing examples to alternate LLM endpoints.
+- docs/openai-agents-sdk/examples/model_providers/custom_example_provider.py — Shows creating a custom `ModelProvider` backed by an `AsyncOpenAI` client and using it per-run via `RunConfig`.
+- docs/openai-agents-sdk/examples/model_providers/custom_example_global.py — Sets global default OpenAI client/API routing to a third-party endpoint and runs agents with that model.
+- docs/openai-agents-sdk/examples/model_providers/custom_example_agent.py — Binds a specific agent to a custom `OpenAIChatCompletionsModel` client for targeted provider usage.
+- docs/openai-agents-sdk/examples/model_providers/litellm_provider.py — Uses the `LitellmModel` wrapper to route tools-enabled runs to any LiteLLM-supported backend, reading model/api key at runtime.
+- docs/openai-agents-sdk/examples/model_providers/litellm_auto.py — Demonstrates the "litellm/..." model naming convention with automatic tool forcing and structured outputs when Anthropic keys are configured.
+
+## reasoning content access
+- docs/openai-agents-sdk/examples/reasoning_content/main.py — Direct model-level example showing how to stream and collect reasoning summaries alongside normal output.
+- docs/openai-agents-sdk/examples/reasoning_content/runner_example.py — Runner-based illustration of capturing reasoning items from blocking and streaming runs with traces.
+- docs/openai-agents-sdk/examples/reasoning_content/gpt_oss_stream.py — Streams reasoning and output tokens from a GPT-OSS deployment via custom chat-completions client.
+- docs/openai-agents-sdk/examples/reasoning_content/__init__.py — Package marker for reasoning content examples (empty).
+
+## realtime experiences
+- docs/openai-agents-sdk/examples/realtime/app/README.md — Explains the full-stack realtime web demo architecture and usage flow.
+- docs/openai-agents-sdk/examples/realtime/app/agent.py — Defines the realtime airline support agents and handoffs reused by the web UI.
+- docs/openai-agents-sdk/examples/realtime/app/server.py — FastAPI WebSocket server that proxies audio/image inputs to `RealtimeRunner`, serializes events, and serves the SPA assets.
+- docs/openai-agents-sdk/examples/realtime/app/static/index.html — Frontend layout for the realtime demo featuring messaging, event, and tool panes.
+- docs/openai-agents-sdk/examples/realtime/app/static/app.js — Browser controller handling WebSocket connection, audio capture/playback, and image uploads for the realtime UI.
+- docs/openai-agents-sdk/examples/realtime/app/static/favicon.ico — Icon asset displayed by the realtime demo web UI.
+- docs/openai-agents-sdk/examples/realtime/app/__init__.py — Package marker enabling relative imports for the app demo (empty).
+- docs/openai-agents-sdk/examples/realtime/cli/demo.py — Console-based realtime demo covering bidirectional audio streaming, playback tracking, and interruption handling without a GUI.
+- docs/openai-agents-sdk/examples/realtime/cli/ui.py — Textual TUI frontend for realtime sessions, displaying transcripts and raw events while coordinating audio capture.
+- docs/openai-agents-sdk/examples/realtime/cli/__init__.py — Package marker for the CLI demo (empty).
+- docs/openai-agents-sdk/examples/realtime/twilio/README.md — Step-by-step Twilio integration guide bridging phone calls with the realtime API.
+- docs/openai-agents-sdk/examples/realtime/twilio/server.py — FastAPI server exposing TwiML webhook and media-stream WebSocket, delegating to `TwilioHandler`.
+- docs/openai-agents-sdk/examples/realtime/twilio/twilio_handler.py — Implements the Twilio transport layer that adapts Media Stream messages to realtime sessions, handles playback tracking, and tools like weather/time.
+- docs/openai-agents-sdk/examples/realtime/twilio/requirements.txt — Dependency pinning for Twilio realtime example (install before running).
+- docs/openai-agents-sdk/examples/realtime/twilio/__init__.py — Package marker for the Twilio demo (empty).
+
+## research_bot pipeline
+- docs/openai-agents-sdk/examples/research_bot/README.md — Overview of the multi-agent research assistant pipeline and enhancement ideas.
+- docs/openai-agents-sdk/examples/research_bot/__init__.py — Package marker for the research bot example (empty).
+- docs/openai-agents-sdk/examples/research_bot/main.py — CLI entry launching the research manager for user-provided topics.
+- docs/openai-agents-sdk/examples/research_bot/manager.py — Coordinates planning, concurrent web search, streaming writer status, and prints final reports/questions.
+- docs/openai-agents-sdk/examples/research_bot/printer.py — Rich live display helper reused by the manager.
+- docs/openai-agents-sdk/examples/research_bot/agents/planner_agent.py — Planner agent producing `WebSearchPlan` objects with reasoning-enabled GPT-5.
+- docs/openai-agents-sdk/examples/research_bot/agents/search_agent.py — Web search agent using `WebSearchTool` with required tool calls to compile summaries.
+- docs/openai-agents-sdk/examples/research_bot/agents/writer_agent.py — Writer agent generating long-form markdown plus summary and follow-up questions using reasoning settings.
+- docs/openai-agents-sdk/examples/research_bot/sample_outputs/product_recs.md — Sample markdown output showing report formatting for product recommendations.
+- docs/openai-agents-sdk/examples/research_bot/sample_outputs/product_recs.txt — Plain-text companion output illustrating the writer agent’s text mode.
+- docs/openai-agents-sdk/examples/research_bot/sample_outputs/vacation.md — Markdown report sample demonstrating the report layout.
+- docs/openai-agents-sdk/examples/research_bot/sample_outputs/vacation.txt — Plain-text version of the vacation sample output for quick inspection.
+
+## tools integrations
+- docs/openai-agents-sdk/examples/tools/code_interpreter.py — Streams `CodeInterpreterTool` usage, dumping executed code snippets and final results.
+- docs/openai-agents-sdk/examples/tools/computer_use.py — Demonstrates local Playwright-backed `AsyncComputer` subclass controlling a browser through the Computer Use model and tool.
+- docs/openai-agents-sdk/examples/tools/file_search.py — Creates a vector store, indexes a file, and queries it through `FileSearchTool` with results included.
+- docs/openai-agents-sdk/examples/tools/image_generator.py — Invokes the image generation tool, saves the base64 output to disk, and opens the temp file.
+- docs/openai-agents-sdk/examples/tools/web_search.py — Simple `WebSearchTool` usage constrained to an approximate user location.
+- docs/openai-agents-sdk/examples/tools/web_search_filters.py — Demonstrates advanced filters (domain restrictions, source capture) and prints tool-derived sources.
+
+## voice pipelines
+- docs/openai-agents-sdk/examples/voice/static/README.md — Describes the record-then-run voice pipeline demo and suggested prompts.
+- docs/openai-agents-sdk/examples/voice/static/main.py — Sets up a single-agent voice workflow with handoffs and tools, records audio, runs the pipeline, and plays streamed speech.
+- docs/openai-agents-sdk/examples/voice/static/util.py — Provides terminal audio recording and playback helpers using `sounddevice` for the static voice demo.
+- docs/openai-agents-sdk/examples/voice/static/__init__.py — Package marker for static voice demo (empty).
+- docs/openai-agents-sdk/examples/voice/streamed/README.md — Overview of the interactive streamed voice conversation demo with automatic turn detection.
+- docs/openai-agents-sdk/examples/voice/streamed/main.py — Textual UI client that streams microphone audio into a `VoicePipeline` and renders lifecycle/audio events.
+- docs/openai-agents-sdk/examples/voice/streamed/my_workflow.py — Custom workflow responding to a “secret word,” orchestrating handoffs/tools, and streaming agent output back through the pipeline.
+- docs/openai-agents-sdk/examples/voice/streamed/__init__.py — Package marker for streamed voice demo (empty).
