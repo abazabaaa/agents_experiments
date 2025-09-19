@@ -177,3 +177,22 @@ For type errors from ty:
 </best_practices>
 
 </development_guidelines>
+
+
+## CRITICAL BEHAVIORS
+
+- Reading the documentation before beginning code changes is a critical part of ensure adherence to APIs/SDKs. You have access to documentation for trio, trio-asyncio, openai agents sdk ([text](docs/openai-agents-sdk)), uv, ty, ruff, fastmcp, lark and claude code sdk. You should always LS the docs dir, then LS recursively into the docs dirs of interest the recursively rg to explore example code, patterns, function signatures, class signatures/methods and overloads. 
+
+**BAD WORKFLOW:**
+
+1) recieve issue or new feature to implement from the user
+2) read through code and identify issues/code touch points or requirements for feature implementation
+3) implement the feature or fix the bug
+
+**GOOD WORKFLOW:**
+
+1) recieve issue or new feature to implement from the user
+2) read through code and identify issues/code touch points or requirements for feature implementation
+3) recursively and proactively investigate the docs/ dir the validate/verify/learn patterns, function signatures, methods, classes, overloads from md documation or example code.
+4) PLAN your implementation based on the insight from the documentation
+5) implement the fix or feature
