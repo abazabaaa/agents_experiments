@@ -93,6 +93,23 @@
       "max_tokens": 4096,
       "run_max_turns": 1,
       "instructions_path": "prompts/agents/optimized/namer.md"
+    },
+    "orchestrator": {
+      "name": "WorkflowOrchestrator",
+      "instructions_path": "prompts/agents/optimized/orchestrator.md",
+      "model": "gpt-5",
+      "reasoning_effort": "high",
+      "verbosity": "medium",
+      "timeout": 300.0,
+      "max_tokens": 16384,
+      "run_max_turns": 14,
+      "handoffs": [
+        "router",
+        "markdown_cleaner",
+        "notebook_refactor",
+        "reviewer",
+        "namer"
+      ]
     }
   }
 }

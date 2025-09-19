@@ -34,3 +34,24 @@ class NamingResult(BaseModel):
     file_slug: str
     extension: str
     title: str | None = None
+
+
+class WorkflowReviewResult(BaseModel):
+    approved: bool
+    issues: str | None = Field(default=None, max_length=1200)
+    suggestions: str | None = Field(default=None, max_length=800)
+
+
+class WorkflowNamingResult(BaseModel):
+    file_slug: str
+    extension: str
+    title: str | None = None
+
+
+class WorkflowOutput(BaseModel):
+    route: Literal["markdown", "notebook"]
+    processed_text: str
+    summary: str | None = None
+    review: WorkflowReviewResult
+    naming: WorkflowNamingResult
+    rework_cycles: int = Field(ge=0)

@@ -21,6 +21,7 @@ from ..stages.models import (
     NotebookRefactorResult,
     ReviewResult,
     RoutingDecision,
+    WorkflowOutput,
 )
 from ..stages.types import DocTask
 
@@ -64,6 +65,94 @@ class WorkflowRunner:
     ) -> WorkflowArtifacts:
         """Run the multi-stage workflow for ``doc`` and return collected artifacts."""
 
+        if "orchestrator" in self._config.agent_specs:
+            return await self._run_with_orchestrator(doc)
+        return await self._run_manual(doc)
+
+    async def _run_with_orchestrator(self, doc: DocTask) -> WorkflowArtifacts:
+        # Ensure dependent agents exist before constructing orchestrator handoffs.
+        self._registry.get_agent("router", output_type=RoutingDecision)
+        self._registry.get_agent("markdown_cleaner", output_type=MarkdownCleanResult)
+        self._registry.get_agent(
+            "notebook_refactor", output_type=NotebookRefactorResult
+        )
+        self._registry.get_agent("reviewer", output_type=ReviewResult)
+        self._registry.get_agent("namer", output_type=NamingResult)
+
+        orchestrator_agent = self._registry.get_agent(
+            "orchestrator", output_type=WorkflowOutput
+        )
+
+        builder = ConversationBuilder()
+        builder.add_developer(
+            "You orchestrate the document preparation workflow. Use handoffs to specialised agents for routing, transformation, review, and naming."
+        )
+        builder.add_developer(
+            "Available handoffs: router (classification), markdown_cleaner, notebook_refactor, reviewer, namer. Capture outputs before proceeding."
+        )
+        builder.add_developer(
+            f"Do not exceed {self._config.rework_max_cycles} rework cycles. If you reach the limit, return review.approved=false and include the reviewer feedback."
+        )
+        builder.add_user(
+            f"Document URL: {doc.url}\n"
+            f"Metadata: {doc.metadata}\n\n"
+            "--- Raw Document ---\n"
+            f"{doc.content}\n"
+            "--- End Document ---"
+        )
+        conversation = builder.build()
+
+        metadata = {
+            "stage": "workflow",
+            "doc_url": doc.url,
+            "rework_enabled": self._config.rework_enabled,
+            "rework_max_cycles": self._config.rework_max_cycles,
+        }
+        context = AgentCallContext(
+            logger=self._logger,
+            workflow_name=self._config.workflow_name,
+            stage="workflow",
+            run_id=f"orchestrator-{doc.doc_id}",
+            doc_url=doc.url,
+            metadata=metadata,
+        )
+        run_config = build_run_config(self._config, context)
+        run_result = await call_agent(
+            orchestrator_agent,
+            conversation,
+            context=context,
+            run_config=run_config,
+            limiter_pool=self._limiter_pool,
+            timeout=self._config.agent_specs["orchestrator"].timeout,
+            run_max_turns=self._config.agent_specs["orchestrator"].run_max_turns,
+        )
+
+        final_output: WorkflowOutput = run_result.final_output
+        naming_extension = final_output.naming.extension
+        if not naming_extension.startswith("."):
+            naming_extension = f".{naming_extension}"
+
+        review_result = ReviewResult(
+            approved=final_output.review.approved,
+            issues=final_output.review.issues,
+            suggestions=final_output.review.suggestions,
+        )
+        naming_result = NamingResult(
+            file_slug=final_output.naming.file_slug,
+            extension=naming_extension,
+            title=final_output.naming.title,
+        )
+
+        return WorkflowArtifacts(
+            route=final_output.route,
+            processed_text=final_output.processed_text,
+            summary=final_output.summary,
+            review=review_result,
+            naming=naming_result,
+            rework_cycles=final_output.rework_cycles,
+        )
+
+    async def _run_manual(self, doc: DocTask) -> WorkflowArtifacts:
         base_metadata = dict(doc.metadata)
         base_metadata.setdefault("doc_url", doc.url)
 

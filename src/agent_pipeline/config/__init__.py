@@ -348,6 +348,7 @@ class AgentSpec:
     timeout: float | None
     max_tokens: int | None
     run_max_turns: int | None = None
+    handoffs: tuple[str, ...] = ()
     # Base model settings mapping (validated against ModelSettings). Optional.
     model_settings: Mapping[str, Any] = field(default_factory=dict)
     # Optional Agent-level knobs
@@ -531,6 +532,18 @@ class AgentSpec:
                 f"agents.{key}.instructions must be provided via instructions_path or literal"
             )
 
+        handoffs_raw = payload.get("handoffs")
+        if handoffs_raw is None:
+            handoffs_tuple: tuple[str, ...] = ()
+        elif isinstance(handoffs_raw, list) and all(
+            isinstance(entry, str) for entry in handoffs_raw
+        ):
+            handoffs_tuple = tuple(str(entry) for entry in handoffs_raw)
+        else:
+            raise TypeError(
+                f"agents.{key}.handoffs must be a list of agent keys if provided"
+            )
+
         return cls(
             key=key,
             name=str_or_default(payload.get("name"), key),
@@ -541,6 +554,7 @@ class AgentSpec:
             timeout=timeout_float,
             max_tokens=max_tokens_int,
             run_max_turns=run_max_turns_int,
+            handoffs=handoffs_tuple,
             model_settings=model_settings_out,
             tool_use_behavior=tool_use_behavior_out,
             reset_tool_choice=reset_tool_choice_out,

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, MutableMapping, Optional
+from collections.abc import MutableMapping
+from typing import Any
 
 from agents import Agent
 from agents.model_settings import ModelSettings
@@ -23,8 +24,8 @@ class AgentRegistry:
         key: str,
         *,
         output_type: Any,
-        tools: Optional[list[Any]] = None,
-        mcp_servers: Optional[list[Any]] = None,
+        tools: list[Any] | None = None,
+        mcp_servers: list[Any] | None = None,
     ) -> Agent[Any]:
         """Return an Agent instance keyed by ``key`` with optional overrides."""
 
@@ -32,6 +33,17 @@ class AgentRegistry:
             return self._cache[key]
         spec = self._lookup_spec(key)
         model_settings = self._build_model_settings(spec)
+
+        handoff_agents = None
+        if spec.handoffs:
+            missing = [name for name in spec.handoffs if name not in self._cache]
+            if missing:
+                missing_str = ", ".join(missing)
+                raise ValueError(
+                    f"Agent '{key}' requires handoffs to {missing_str}, but they are not initialised."
+                )
+            handoff_agents = [self._cache[name] for name in spec.handoffs]
+
         agent = Agent(
             name=spec.name,
             instructions=spec.instructions,
@@ -41,7 +53,10 @@ class AgentRegistry:
             tools=tools or [],
             mcp_servers=mcp_servers or [],
             tool_use_behavior=(spec.tool_use_behavior or "run_llm_again"),
-            reset_tool_choice=(spec.reset_tool_choice if spec.reset_tool_choice is not None else True),
+            reset_tool_choice=(
+                spec.reset_tool_choice if spec.reset_tool_choice is not None else True
+            ),
+            handoffs=handoff_agents,
         )
         self._cache[key] = agent
         return agent
