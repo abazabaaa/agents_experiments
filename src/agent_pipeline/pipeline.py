@@ -150,6 +150,12 @@ class Pipeline:
                     processed_text=artifacts.processed_text,
                     metadata=metadata,
                 )
+                self.logger.verbose(
+                    "WORKFLOW_RESULT "
+                    f"doc={doc.doc_id} url={doc.url} route={artifacts.route} "
+                    f"slug={artifacts.naming.file_slug}{artifacts.naming.extension} "
+                    f"approved={artifacts.review.approved} rework_cycles={artifacts.rework_cycles}"
+                )
                 await write_send.send(named_doc)
             finally:
                 await completion_counter.increment()
