@@ -12,7 +12,6 @@ from functools import partial
 from pathlib import Path
 from uuid import uuid4
 
-import httpx
 import trio
 import trio_asyncio
 from agents import set_default_openai_client
@@ -22,6 +21,7 @@ from .agents.registry import AgentRegistry
 from .config import PipelineConfig
 from .limiters import LimiterPool
 from .logging import StructuredLogger
+from .openai_client import ClientTuning, build_async_openai_client
 from .stages.ingest import load_documents
 from .stages.types import CompletionCounter, DocTask, NamedDoc
 from .stages.writer import writer_stage
@@ -226,18 +226,16 @@ class Pipeline:
             self.logger.verbose("OPENAI_CLIENT skip reason=no_api_key")
             return None
         timeout_cfg = self.config.httpx_timeout
-        timeout = httpx.Timeout(
-            connect=timeout_cfg.connect,
-            read=timeout_cfg.read,
-            write=timeout_cfg.write,
-            pool=timeout_cfg.pool,
+        client = build_async_openai_client(
+            api_key=api_key,
+            timeout_cfg=timeout_cfg,
+            tuning=ClientTuning(max_retries=5),
         )
-        client = AsyncOpenAI(api_key=api_key, timeout=timeout)
         set_default_openai_client(client)
         self.logger.verbose(
             "OPENAI_CLIENT "
             f"timeout=connect:{timeout_cfg.connect}s read:{timeout_cfg.read}s "
-            f"write:{timeout_cfg.write}s pool:{timeout_cfg.pool}s"
+            f"write:{timeout_cfg.write}s pool:{timeout_cfg.pool}s max_retries=5"
         )
         return client
 
