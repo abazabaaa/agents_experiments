@@ -34,7 +34,7 @@ class AgentRegistry:
         spec = self._lookup_spec(key)
         model_settings = self._build_model_settings(spec)
 
-        handoff_agents = None
+        handoff_agents: list[Agent[Any]] = []
         if spec.handoffs:
             missing = [name for name in spec.handoffs if name not in self._cache]
             if missing:
