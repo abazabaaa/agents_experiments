@@ -36,3 +36,17 @@ If no orchestrator is configured, the `WorkflowRunner` reuses the previous flow:
   calls.
 - Structured logs (prefixed with `WORKFLOW_RESULT`) capture the route, slug,
   review status, and rework cycle count for every processed document.
+
+## Running the smoke test
+
+Use the bundled script to exercise the end-to-end workflow with the
+`configs/smoke_gpt5_nano.json` configuration:
+
+```
+uv run python scripts/gpt5_nano_smoke.py --clean --quiet
+```
+
+- `--clean` wipes the output directory before running.
+- `--quiet` reduces console logging; omit it if you want verbose traces.
+- `--config` and `--expect` flags allow pointing at alternate configs or
+  adjusting the expected document count.

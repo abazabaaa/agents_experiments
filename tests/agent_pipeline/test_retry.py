@@ -4,10 +4,9 @@ import random
 
 import httpx
 import pytest
-from trio.testing import trio_test
-
 from agent_pipeline.config import RetryPolicy
 from agent_pipeline.retry import RetryState, retry_async
+from trio.testing import trio_test
 
 
 @trio_test

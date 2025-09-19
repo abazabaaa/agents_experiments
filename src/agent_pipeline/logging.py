@@ -7,13 +7,13 @@ import logging
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from agents import Agent
 from agents.lifecycle import RunHooks
 from agents.run_context import RunContextWrapper
 
-TRACE_ID_VAR: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+TRACE_ID_VAR: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "agent_pipeline_trace_id", default=None
 )
 
@@ -94,8 +94,8 @@ class AgentCallContext:
     run_id: str
     doc_url: str
     metadata: dict[str, Any]
-    trace_id: Optional[str] = None
-    prompt_excerpt: Optional[str] = None
+    trace_id: str | None = None
+    prompt_excerpt: str | None = None
 
 
 class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
@@ -152,7 +152,7 @@ class LifecycleLoggingHooks(RunHooks[AgentCallContext]):
         self,
         context: RunContextWrapper[AgentCallContext],
         agent: Agent[AgentCallContext],
-        system_prompt: Optional[str],
+        system_prompt: str | None,
         input_items: list[Any],
     ) -> None:
         ctx = self._ensure_context(context)

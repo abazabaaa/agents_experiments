@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Mapping, Optional
 
 import trio
 from trio.lowlevel import current_task
@@ -26,14 +26,14 @@ class LimiterPool:
 
         return self._overall.total_tokens
 
-    def get_model_capacity(self, model: str) -> Optional[int]:
+    def get_model_capacity(self, model: str) -> int | None:
         """Return the concurrency limit for ``model`` if configured."""
 
         limiter = self._model_limiters.get(model)
         return limiter.total_tokens if limiter else None
 
     @asynccontextmanager
-    async def acquire(self, *, model: Optional[str] = None) -> AsyncIterator[None]:
+    async def acquire(self, *, model: str | None = None) -> AsyncIterator[None]:
         """Acquire the global limiter and optionally the model limiter."""
 
         token = current_task()

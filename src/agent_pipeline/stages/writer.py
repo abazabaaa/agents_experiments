@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
 
 import trio
 
@@ -19,7 +18,7 @@ async def writer_stage(
     logger: StructuredLogger,
     completion_counter: CompletionCounter,
 ) -> None:
-    existing_names: Dict[str, int] = {}
+    existing_names: dict[str, int] = {}
     lock = trio.Lock()
     async with receive:
         async for doc in receive:

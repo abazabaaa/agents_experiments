@@ -2,25 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import trio
-
 from agents import Agent
 from agents.run import RunConfig
 
+from ..bridge.asyncio import run_agent as run_agent_asyncio
 from ..config import RetryPolicy
 from ..constants import DEFAULT_AGENT_TIMEOUT
 from ..conversation import AgentInput, ensure_conversation
+from ..limiters import LimiterPool
 from ..logging import (
+    TRACE_ID_VAR,
     AgentCallContext,
     LifecycleLoggingHooks,
     StructuredLogger,
-    TRACE_ID_VAR,
 )
-from ..limiters import LimiterPool
 from ..retry import execute_with_retry
-from ..bridge.asyncio import run_agent as run_agent_asyncio
 
 
 async def call_agent(
@@ -30,8 +30,8 @@ async def call_agent(
     context: AgentCallContext,
     run_config: RunConfig,
     limiter_pool: LimiterPool,
-    timeout: Optional[float] = None,
-    run_max_turns: Optional[int] = None,
+    timeout: float | None = None,
+    run_max_turns: int | None = None,
 ) -> Any:
     """Call ``agent`` with concurrency limiting and logging."""
 

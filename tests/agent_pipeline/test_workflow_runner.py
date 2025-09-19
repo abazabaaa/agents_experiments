@@ -7,18 +7,14 @@ from typing import Any
 
 import pytest
 import trio
-
-from agent_pipeline.config import load_config
 from agent_pipeline.agents.registry import AgentRegistry
+from agent_pipeline.config import load_config
 from agent_pipeline.limiters import LimiterPool
 from agent_pipeline.logging import StructuredLogger
 from agent_pipeline.retry import RetryPolicy
-from agent_pipeline.workflow.runner import WorkflowRunner
-from agent_pipeline.workflow.runner import WorkflowArtifacts
 from agent_pipeline.stages.models import (
     MarkdownCleanResult,
     NamingResult,
-    NotebookRefactorResult,
     ReviewResult,
     RoutingDecision,
     WorkflowNamingResult,
@@ -26,6 +22,7 @@ from agent_pipeline.stages.models import (
     WorkflowReviewResult,
 )
 from agent_pipeline.stages.types import DocTask
+from agent_pipeline.workflow.runner import WorkflowArtifacts, WorkflowRunner
 
 
 class FakeRunResult:

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Awaitable, Callable, Iterable, Optional, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 import httpx
 import trio
@@ -81,7 +82,7 @@ async def retry_async(
     *,
     policy: RetryPolicy,
     retryable_status_codes: Iterable[int] = DEFAULT_RETRYABLE_STATUS_CODES,
-    rng: Optional[random.Random] = None,
+    rng: random.Random | None = None,
 ) -> T:
     """Execute ``func`` with retries using ``policy``.
 
@@ -110,11 +111,11 @@ async def retry_async(
 async def execute_with_retry(
     stage: str,
     doc_id: int,
-    logger: "StructuredLogger",
+    logger: StructuredLogger,
     policy: RetryPolicy,
     func: Callable[[int], Awaitable[T]],
     *,
-    rng: Optional[random.Random] = None,
+    rng: random.Random | None = None,
 ) -> T:
     """Execute ``func`` retrying on transient errors while logging attempts."""
 

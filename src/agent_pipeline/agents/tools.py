@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 
 def build_tools(_config: Mapping[str, Any] | None) -> Sequence[Any]:
