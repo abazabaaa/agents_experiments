@@ -178,6 +178,34 @@ For type errors from ty:
 
 </development_guidelines>
 
+## Trio / trio-asyncio Integration Notes
+
+We run the pipeline inside Trio but call into asyncio-based SDKs via
+`trio_asyncio.open_loop()`. Keep these lessons in mind when touching concurrency
+code:
+
+- Always wrap asyncio interactions with `async with trio_asyncio.open_loop():`
+  to ensure each batch gets a fresh loop.
+- Disable HTTP keep-alives or reinitialize transports between loops to avoid
+  “Event loop is closed” errors when reusing clients.
+- Rely on Trio primitives (`Semaphore`, `move_on_after`, `open_memory_channel`)
+  for concurrency and cancellation; never spawn bare `asyncio.create_task` from
+  Trio code.
+- Ensure long-running operations yield checkpoints regularly so the nursery can
+  shut down cleanly.
+- Logging/trace hooks should be lightweight; if heavy work is needed, offload
+  with `trio.to_thread`.
+
+### Documentation Landmarks
+
+- Trio core concepts and APIs: `docs/trio/index.md`, `docs/trio/reference-core1.md`
+- trio-asyncio usage patterns: `docs/trio-asyncio/usage.md`
+- Architecture notes on why we removed the orchestrator:
+  `docs/architecture/workflow.md`
+
+Having these references handy should make future debugging and feature work
+less painful.
+
 
 ## CRITICAL BEHAVIORS
 
