@@ -8,7 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from agents.result import RunResult
-from agents import ItemHelpers
+from agents import ItemHelpers, Session
 from agents.items import (
     MessageOutputItem,
     ReasoningItem,
@@ -20,7 +20,12 @@ from ..agents.registry import AgentRegistry
 from ..agents.runconfig import build_run_config
 from ..agents.runner import call_agent, call_agent_with_retry
 from ..config import PipelineConfig
-from ..conversation import AgentInput, ConversationBuilder, developer_message
+from ..conversation import (
+    AgentInput,
+    ConversationBuilder,
+    developer_message,
+    ensure_conversation,
+)
 from ..limiters import LimiterPool
 from ..logging import AgentCallContext, StructuredLogger
 from ..retry import RetryPolicy
@@ -75,14 +80,21 @@ class WorkflowRunner:
     async def process_document(
         self,
         doc: DocTask,
+        *,
+        session: Session,
     ) -> WorkflowArtifacts:
         """Run the multi-stage workflow for ``doc`` and return collected artifacts."""
 
         if "orchestrator" in self._config.agent_specs:
-            return await self._run_with_orchestrator(doc)
-        return await self._run_manual(doc)
+            return await self._run_with_orchestrator(doc, session=session)
+        return await self._run_manual(doc, session=session)
 
-    async def _run_with_orchestrator(self, doc: DocTask) -> WorkflowArtifacts:
+    async def _run_with_orchestrator(
+        self,
+        doc: DocTask,
+        *,
+        session: Session,
+    ) -> WorkflowArtifacts:
         # Ensure dependent agents exist before constructing orchestrator handoffs.
         self._registry.get_agent("router", output_type=RoutingDecision)
         self._registry.get_agent("markdown_cleaner", output_type=MarkdownCleanResult)
@@ -146,6 +158,7 @@ class WorkflowRunner:
             limiter_pool=self._limiter_pool,
             timeout=self._config.agent_specs["orchestrator"].timeout,
             run_max_turns=self._config.agent_specs["orchestrator"].run_max_turns,
+            session=session,
         )
 
         final_output: WorkflowOutput = run_result.final_output
@@ -177,21 +190,26 @@ class WorkflowRunner:
             final_output=final_output_dict,
         )
 
-    async def _run_manual(self, doc: DocTask) -> WorkflowArtifacts:
+    async def _run_manual(
+        self,
+        doc: DocTask,
+        *,
+        session: Session,
+    ) -> WorkflowArtifacts:
         base_metadata = dict(doc.metadata)
         base_metadata.setdefault("doc_url", doc.url)
 
-        conversation = self._initial_conversation(doc)
+        initial_messages = self._initial_conversation(doc)
 
         router_result = await self._run_stage(
             agent_key="router",
             stage="routing",
             doc=doc,
-            input_items=conversation,
+            input_items=initial_messages,
             metadata=base_metadata,
             output_type=RoutingDecision,
+            session=session,
         )
-        conversation = router_result.run_result.to_input_list()
         route = router_result.output.route
 
         processed_text: str | None = None
@@ -205,19 +223,22 @@ class WorkflowRunner:
             )
             stage_label = "markdown" if route == "markdown" else "notebook"
 
+            work_prompt = self._work_stage_prompt(route)
+            work_input = [developer_message(work_prompt)]
+
             work_result = await self._run_stage(
                 agent_key=stage_key,
                 stage=stage_label,
                 doc=doc,
-                input_items=conversation,
+                input_items=work_input,
                 metadata=base_metadata,
                 output_type=(
                     MarkdownCleanResult
                     if route == "markdown"
                     else NotebookRefactorResult
                 ),
+                session=session,
             )
-            conversation = work_result.run_result.to_input_list()
             if route == "markdown":
                 processed_text = work_result.output.cleaned_markdown
                 summary = work_result.output.summary
@@ -225,15 +246,18 @@ class WorkflowRunner:
                 processed_text = work_result.output.python_script
                 summary = work_result.output.summary
 
+            review_prompt = self._review_stage_prompt()
+            review_input = [developer_message(review_prompt)]
+
             review = await self._run_stage(
                 agent_key="reviewer",
                 stage="review",
                 doc=doc,
-                input_items=conversation,
+                input_items=review_input,
                 metadata=base_metadata,
                 output_type=ReviewResult,
+                session=session,
             )
-            conversation = review.run_result.to_input_list()
             review_result = review.output
             if review_result.approved:
                 break
@@ -242,42 +266,50 @@ class WorkflowRunner:
                 rework_cycles >= self._config.rework_max_cycles
             ):
                 raise WorkflowError(
-                    "Review rejected document and rework is disabled or exceeded maximum cycles"
+                    "Review rejected document and rework is disabled or exceeded "
+                    "maximum cycles"
                 )
 
             rework_cycles += 1
+            await self._rewind_session(session, review_input, review.run_result)
+
             feedback_message = self._compose_feedback_message(review_result)
             if feedback_message:
-                conversation.append(developer_message(feedback_message))
+                await session.add_items([developer_message(feedback_message)])
 
             target = self._config.rework_target_on_reject
             if target == "router":
+                router_prompt = self._router_rework_prompt()
+                router_input = [developer_message(router_prompt)]
                 router_retry = await self._run_stage(
                     agent_key="router",
                     stage="routing",
                     doc=doc,
-                    input_items=conversation,
+                    input_items=router_input,
                     metadata=base_metadata,
                     output_type=RoutingDecision,
+                    session=session,
                 )
-                conversation = router_retry.run_result.to_input_list()
                 route = router_retry.output.route
             elif target in {"markdown", "notebook"}:
                 route = target
-            # otherwise "same": keep previous route
 
         if processed_text is None or review_result is None:
             raise WorkflowError(
                 "Workflow completed without producing processed content"
             )
 
+        naming_prompt = self._naming_stage_prompt()
+        naming_input = [developer_message(naming_prompt)]
+
         naming = await self._run_stage(
             agent_key="namer",
             stage="naming",
             doc=doc,
-            input_items=conversation,
+            input_items=naming_input,
             metadata=base_metadata,
             output_type=NamingResult,
+            session=session,
         )
 
         naming_output = naming.output
@@ -377,6 +409,7 @@ class WorkflowRunner:
         input_items: AgentInput,
         metadata: dict[str, Any],
         output_type: Any,
+        session: Session,
     ) -> StageRunResult:
         stage_spec = self._config.agent_specs[agent_key]
         agent = self._registry.get_agent(agent_key, output_type=output_type)
@@ -403,6 +436,7 @@ class WorkflowRunner:
                 limiter_pool=self._limiter_pool,
                 timeout=stage_spec.timeout,
                 run_max_turns=stage_spec.run_max_turns,
+                session=session,
             )
             return run_result
 
@@ -417,6 +451,49 @@ class WorkflowRunner:
             run_result=run_result,
             output=run_result.final_output,
         )
+
+    def _work_stage_prompt(self, route: Literal["markdown", "notebook"]) -> str:
+        if route == "markdown":
+            return (
+                "Generate the polished markdown draft for publication using the "
+                "latest document context."
+            )
+        return (
+            "Generate the refactored notebook script for publication using the "
+            "latest document context."
+        )
+
+    def _review_stage_prompt(self) -> str:
+        return (
+            "Review the most recent draft and respond with review.approved, "
+            "review.issues, and review.suggestions."
+        )
+
+    def _naming_stage_prompt(self) -> str:
+        return (
+            "Provide the final naming metadata (file_slug, extension, title) "
+            "for the prepared document."
+        )
+
+    def _router_rework_prompt(self) -> str:
+        return (
+            "Reevaluate the routing decision using the latest reviewer "
+            "feedback and conversation context."
+        )
+
+    async def _rewind_session(
+        self,
+        session: Session,
+        input_items: AgentInput,
+        run_result: RunResult[Any],
+    ) -> None:
+        total_to_pop = len(ensure_conversation(input_items)) + len(
+            getattr(run_result, "new_items", [])
+        )
+        for _ in range(total_to_pop):
+            popped = await session.pop_item()
+            if popped is None:
+                break
 
     @staticmethod
     def _compose_feedback_message(review: ReviewResult) -> str | None:

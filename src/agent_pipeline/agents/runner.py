@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import trio
-from agents import Agent
+from agents import Agent, Session
 from agents.run import RunConfig
 
 from ..bridge.asyncio import run_agent as run_agent_asyncio
@@ -32,6 +32,7 @@ async def call_agent(
     limiter_pool: LimiterPool,
     timeout: float | None = None,
     run_max_turns: int | None = None,
+    session: Session | None = None,
 ) -> Any:
     """Call ``agent`` with concurrency limiting and logging."""
 
@@ -47,6 +48,7 @@ async def call_agent(
                     "context": context,
                     "hooks": hooks,
                     "run_config": run_config,
+                    "session": session,
                 }
                 if run_max_turns is not None:
                     kwargs["max_turns"] = run_max_turns

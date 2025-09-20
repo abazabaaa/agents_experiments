@@ -12,6 +12,7 @@ from agent_pipeline.config import load_config
 from agent_pipeline.limiters import LimiterPool
 from agent_pipeline.logging import StructuredLogger
 from agent_pipeline.retry import RetryPolicy
+from agent_pipeline.conversation import ensure_conversation
 from agent_pipeline.stages.models import (
     MarkdownCleanResult,
     NamingResult,
@@ -25,14 +26,44 @@ from agent_pipeline.stages.types import DocTask
 from agent_pipeline.workflow.runner import WorkflowArtifacts, WorkflowRunner
 
 
+class FakeRunItem:
+    def __init__(self, content: str) -> None:
+        self._message = {"role": "assistant", "content": content}
+
+    def to_input_item(self) -> dict[str, str]:
+        return dict(self._message)
+
+
 class FakeRunResult:
     def __init__(self, final_output: Any, marker: str) -> None:
         self.final_output = final_output
         self._marker = marker
-        self.new_items: list[Any] = []
+        self.new_items: list[FakeRunItem] = [FakeRunItem(marker)]
+        self.input: list[dict[str, str]] = []
 
-    def to_input_list(self) -> list[dict[str, str]]:
-        return [{"role": "assistant", "content": self._marker}]
+
+class FakeSession:
+    def __init__(self) -> None:
+        self.items: list[dict[str, str]] = []
+        self.pop_calls = 0
+
+    async def get_items(self, limit: int | None = None) -> list[dict[str, str]]:
+        if limit is None:
+            return list(self.items)
+        return list(self.items[-limit:])
+
+    async def add_items(self, new_items: list[dict[str, str]]) -> None:
+        for item in new_items:
+            self.items.append(dict(item))
+
+    async def pop_item(self) -> dict[str, str] | None:
+        self.pop_calls += 1
+        if not self.items:
+            return None
+        return self.items.pop()
+
+    async def clear_session(self) -> None:
+        self.items.clear()
 
 
 @pytest.fixture(scope="module")
@@ -66,6 +97,7 @@ def test_workflow_runner_manual_success(
     doc = DocTask(
         doc_id=1, url="https://example.com/doc", content="raw document", metadata={}
     )
+    session = FakeSession()
 
     stage_outputs = {
         "routing": [
@@ -103,22 +135,31 @@ def test_workflow_runner_manual_success(
         retry_policy: RetryPolicy,
         attempt,
     ):
-        try:
-            return stage_outputs[stage].pop(0)
-        except (KeyError, IndexError) as exc:  # pragma: no cover
-            raise AssertionError(f"Unexpected stage call: {stage}") from exc
+        return await attempt(1)
 
-    async def fail_call_agent(*args, **kwargs):  # pragma: no cover
-        raise AssertionError("call_agent should not be invoked in manual workflow test")
+    async def fake_call_agent(*args, **kwargs):
+        stage_name = kwargs["context"].stage
+        try:
+            result = stage_outputs[stage_name].pop(0)
+        except (KeyError, IndexError) as exc:  # pragma: no cover
+            raise AssertionError(f"Unexpected stage call: {stage_name}") from exc
+
+        input_list = ensure_conversation(args[1])
+        await session.add_items(input_list)
+        await session.add_items(
+            [item.to_input_item() for item in result.new_items]
+        )
+        result.input = input_list
+        return result
 
     monkeypatch.setattr(
         "agent_pipeline.workflow.runner.call_agent_with_retry",
         fake_call_agent_with_retry,
     )
-    monkeypatch.setattr("agent_pipeline.workflow.runner.call_agent", fail_call_agent)
+    monkeypatch.setattr("agent_pipeline.workflow.runner.call_agent", fake_call_agent)
 
     async def run_manual() -> WorkflowArtifacts:
-        return await runner.process_document(doc)
+        return await runner.process_document(doc, session=session)
 
     artifacts = trio.run(run_manual)
     assert artifacts.route == "markdown"
@@ -131,6 +172,13 @@ def test_workflow_runner_manual_success(
     assert artifacts.final_output["route"] == "markdown"
     assert all(not outputs for outputs in stage_outputs.values())
 
+    assistant_contents = [
+        item["content"]
+        for item in session.items
+        if item.get("role") == "assistant"
+    ]
+    assert assistant_contents == ["routed", "cleaned", "approved", "named"]
+
 
 def test_workflow_runner_manual_rework_cycle(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, smoke_config: Any
@@ -140,6 +188,7 @@ def test_workflow_runner_manual_rework_cycle(
     doc = DocTask(
         doc_id=2, url="https://example.com/rework", content="raw", metadata={}
     )
+    session = FakeSession()
 
     stage_outputs = {
         "routing": [
@@ -187,22 +236,31 @@ def test_workflow_runner_manual_rework_cycle(
         retry_policy: RetryPolicy,
         attempt,
     ):
-        try:
-            return stage_outputs[stage].pop(0)
-        except (KeyError, IndexError) as exc:  # pragma: no cover
-            raise AssertionError(f"Unexpected stage call: {stage}") from exc
+        return await attempt(1)
 
-    async def fail_call_agent(*args, **kwargs):  # pragma: no cover
-        raise AssertionError("call_agent should not be invoked in manual workflow test")
+    async def fake_call_agent(*args, **kwargs):
+        stage_name = kwargs["context"].stage
+        try:
+            result = stage_outputs[stage_name].pop(0)
+        except (KeyError, IndexError) as exc:  # pragma: no cover
+            raise AssertionError(f"Unexpected stage call: {stage_name}") from exc
+
+        input_list = ensure_conversation(args[1])
+        await session.add_items(input_list)
+        await session.add_items(
+            [item.to_input_item() for item in result.new_items]
+        )
+        result.input = input_list
+        return result
 
     monkeypatch.setattr(
         "agent_pipeline.workflow.runner.call_agent_with_retry",
         fake_call_agent_with_retry,
     )
-    monkeypatch.setattr("agent_pipeline.workflow.runner.call_agent", fail_call_agent)
+    monkeypatch.setattr("agent_pipeline.workflow.runner.call_agent", fake_call_agent)
 
     async def run_manual() -> WorkflowArtifacts:
-        return await runner.process_document(doc)
+        return await runner.process_document(doc, session=session)
 
     artifacts = trio.run(run_manual)
     assert artifacts.processed_text == "final"
@@ -213,17 +271,28 @@ def test_workflow_runner_manual_rework_cycle(
     assert artifacts.final_output["rework_cycles"] == 1
     assert all(not outputs for outputs in stage_outputs.values())
 
+    assistant_contents = [
+        item["content"]
+        for item in session.items
+        if item.get("role") == "assistant"
+    ]
+    assert "reject" not in assistant_contents
+    assert assistant_contents.count("rerouted") == 1
+    assert session.pop_calls > 0
+
 
 def test_workflow_runner_orchestrator(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, smoke_config: Any
 ) -> None:
     runner = _build_runner(smoke_config, tmp_path)
     doc = DocTask(doc_id=3, url="https://example.com/orch", content="raw", metadata={})
+    session = FakeSession()
 
     orchestrator_calls: list[Any] = []
 
     async def fake_call_agent(agent, input_items, **kwargs):
         orchestrator_calls.append(agent.name)
+        input_list = ensure_conversation(input_items)
         final_output = WorkflowOutput(
             route="markdown",
             processed_text="orchestrated",
@@ -240,7 +309,11 @@ def test_workflow_runner_orchestrator(
             ),
             rework_cycles=0,
         )
-        return FakeRunResult(final_output, "orchestrated")
+        result = FakeRunResult(final_output, "orchestrated")
+        await session.add_items(input_list)
+        await session.add_items([item.to_input_item() for item in result.new_items])
+        result.input = input_list
+        return result
 
     async def fail_call_agent_with_retry(*args, **kwargs):  # pragma: no cover
         raise AssertionError(
@@ -254,7 +327,7 @@ def test_workflow_runner_orchestrator(
     )
 
     async def run_orchestrator() -> WorkflowArtifacts:
-        return await runner.process_document(doc)
+        return await runner.process_document(doc, session=session)
 
     artifacts = trio.run(run_orchestrator)
     assert orchestrator_calls == ["WorkflowOrchestrator"]

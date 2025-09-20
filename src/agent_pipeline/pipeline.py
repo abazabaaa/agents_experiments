@@ -15,7 +15,7 @@ from uuid import uuid4
 import httpx
 import trio
 import trio_asyncio
-from agents import set_default_openai_client
+from agents import SQLiteSession, set_default_openai_client
 from openai import AsyncOpenAI
 
 from .agents.registry import AgentRegistry
@@ -124,8 +124,14 @@ class Pipeline:
         completion_counter: CompletionCounter,
     ) -> None:
         async with semaphore:
+            session = SQLiteSession(
+                f"pipeline-{doc.doc_id}-{uuid4()}"
+            )
             try:
-                artifacts = await workflow_runner.process_document(doc)
+                artifacts = await workflow_runner.process_document(
+                    doc,
+                    session=session,
+                )
             except WorkflowError as exc:
                 await self._record_failure(doc.doc_id, doc.url, "workflow", exc)
             except Exception as exc:  # noqa: BLE001
@@ -160,6 +166,7 @@ class Pipeline:
                 )
                 await write_send.send(named_doc)
             finally:
+                session.close()
                 await completion_counter.increment()
 
     async def _close_writer_when_done(
