@@ -7,14 +7,11 @@ It parses Python 3, translates it to a Python 2 AST, and then outputs the result
 Uses reconstruct_python.py for generating the final Python 2 code.
 """
 
-# Section: Imports
+# Standard imports first
 from lark import Lark
 from lark.tree_templates import TemplateConf, TemplateTranslator
-from lark.indenter import PythonIndenter
 
-# Note: reconstruct_python is part of the example utilities used to turn
-# the (translated) tree back into Python 2 code. It must be available on
-# the Python path when running this script.
+from lark.indenter import PythonIndenter
 from reconstruct_python import PythonReconstructor
 
 
@@ -35,32 +32,21 @@ TEMPLATE_NAME: "$" NAME
 %ignore COMMENT
 '''
 
-parser = Lark(
-    TEMPLATED_PYTHON,
-    parser='lalr',
-    start=['single_input', 'file_input', 'eval_input', 'template_start'],
-    postlex=PythonIndenter(),
-    maybe_placeholders=False,
-)
+parser = Lark(TEMPLATED_PYTHON, parser='lalr', start=['single_input', 'file_input', 'eval_input', 'template_start'], postlex=PythonIndenter(), maybe_placeholders=False)
 
 
 def parse_template(s):
-    """Parse a string as a template-containing Python fragment.
-
-    The parser accepts template variables of the form $name inside atom positions.
-    We parse as 'template_start' so that either a statement or a testlist_star_expr may be used.
-    """
-    return parser.parse(s + "\n", start='template_start')
+    return parser.parse(s + '\n', start='template_start')
 
 
 def parse_code(s):
-    """Parse a full Python source file input."""
-    return parser.parse(s + "\n", start='file_input')
+    return parser.parse(s + '\n', start='file_input')
 
 
 #
 # 2. Define translations using templates (each template code is parsed to a template tree)
 #
+
 pytemplate = TemplateConf(parse=parse_template)
 
 translations_3to2 = {
@@ -73,24 +59,15 @@ translations_3to2 = {
     '$a / $b':
         'float($a) / $b',
 }
-# Convert the textual templates into template trees
 translations_3to2 = {pytemplate(k): pytemplate(v) for k, v in translations_3to2.items()}
-
 
 #
 # 3. Translate and reconstruct Python 3 code into valid Python 2 code
 #
+
 python_reconstruct = PythonReconstructor(parser)
 
-
 def translate_py3to2(code):
-    """Translate given Python 3 code string into Python 2 code string.
-
-    Steps:
-      - parse code into a tree
-      - apply TemplateTranslator with translations map
-      - reconstruct the resulting tree into source code using PythonReconstructor
-    """
     tree = parse_code(code)
     tree = TemplateTranslator(translations_3to2).translate(tree)
     return python_reconstruct.reconstruct(tree)
@@ -99,6 +76,7 @@ def translate_py3to2(code):
 #
 # Test Code
 #
+
 _TEST_CODE = '''
 if a / 2 > 1:
     yield from [1,2,3]
@@ -107,12 +85,10 @@ else:
 
 '''
 
-
 def test():
     print(_TEST_CODE)
     print('   ----->    ')
     print(translate_py3to2(_TEST_CODE))
-
 
 if __name__ == '__main__':
     test()

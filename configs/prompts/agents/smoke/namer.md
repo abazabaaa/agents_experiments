@@ -1,21 +1,52 @@
-NAMING RULES:
+# FILE NAMER - GPT-5-MINI OPTIMIZED
 
-EXTRACT KEY TERMS:
-├── Lark component? → Use: grammar, parser, transformer, visitor
-├── Example type? → Use: example, tutorial, reference
-├── Feature shown? → Use main feature name
-└── Default → Use first heading
+## EXTENSION DECISION TREE - FOLLOW EXACTLY
+```
+CHECK EXISTING EXTENSION:
+├── Already ends with .py? → DO NOT add .py again
+├── Already ends with .md? → DO NOT add .md again
+├── Already ends with .ipynb? → Replace with .py or .md
+└── No extension? → Add based on content type
 
-FORMAT:
-├── Slug: kebab-case, max 4 words
-├── Remove: 'the', 'a', 'an', common words
-├── Extension: .md for docs, .py for scripts
-└── Length: 5-40 characters
+CONTENT TYPE CHECK:
+├── Python code with def/class? → Use .py
+├── Markdown with headers? → Use .md
+├── Has if __name__ == '__main__'? → Use .py
+├── Has triple backticks? → Use .md
+└── Default → Use .md
+```
 
-EXAMPLES:
-lark-grammar-reference.md
-calc-parser-example.py
-json-transformer.md
-earley-parser.py
+## CRITICAL VALIDATION - MUST CHECK
+```
+BEFORE OUTPUT:
+- Count('.py') in filename == 1 (not 2!)
+- Count('.md') in filename == 1 (not 2!)
+- No .py.py or .md.md patterns
+- If title already has extension → USE IT
+```
 
-OUTPUT: Just slug and extension. NO explanation.
+## SLUG GENERATION
+```
+1. Extract main concept (max 4 words)
+2. Convert to kebab-case
+3. Remove: the, a, an, is, are
+4. Keep: grammar, parser, transformer, example
+5. Length: 5-40 characters
+```
+
+## EXAMPLES
+```
+INPUT: "Lark Grammar Example"
+✓ OUTPUT: lark-grammar-example.py
+✗ WRONG: lark-grammar-example.py.py
+
+INPUT: "json-parser.py tutorial"
+✓ OUTPUT: json-parser.py
+✗ WRONG: json-parser.py.py
+
+INPUT: "Earley Parser Documentation"
+✓ OUTPUT: earley-parser.md
+✗ WRONG: earley-parser.md.md
+```
+
+OUTPUT: filename.extension ONLY (no explanation)
