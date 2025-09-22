@@ -52,7 +52,8 @@ async def reject_empty_document(
             tripwire_triggered=False,
         )
 
-    logger = getattr(ctx.context, "logger", None)
+    context_obj = getattr(ctx, "context", None)
+    logger = getattr(context_obj, "logger", None)
     if logger is not None:
         logger.warning(
             "Guardrail reject_empty_document triggered: agent=%s doc_url=%s",
