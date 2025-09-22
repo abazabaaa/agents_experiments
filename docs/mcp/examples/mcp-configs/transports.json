@@ -1,0 +1,50 @@
+{
+  "servers": {
+    "filesystem": {
+      "comment": "Local stdio transport (default)",
+      "command": "bunx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
+      "env": {}
+    },
+    "filesystem-explicit": {
+      "comment": "Explicit stdio transport",
+      "transport": "stdio",
+      "command": "bunx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/tmp"]
+    },
+    "remote-websocket": {
+      "comment": "WebSocket transport for remote servers",
+      "transport": "websocket",
+      "url": "ws://localhost:8080/mcp"
+    },
+    "remote-websocket-secure": {
+      "comment": "Secure WebSocket transport",
+      "transport": "websocket",
+      "url": "wss://api.example.com/mcp"
+    },
+    "streaming-sse": {
+      "comment": "Server-Sent Events transport",
+      "transport": "sse",
+      "url": "https://api.example.com/mcp/sse"
+    },
+    "streaming-http": {
+      "comment": "Streamable HTTP transport",
+      "transport": "streamableHttp",
+      "url": "https://api.example.com/mcp",
+      "sessionId": "optional-session-id"
+    },
+    "sse-with-auth": {
+      "comment": "SSE with OAuth (requires OAuthClientProvider implementation)",
+      "transport": "sse",
+      "url": "https://api.example.com/mcp/sse",
+      "authProvider": {
+        "clientId": "your-client-id",
+        "clientSecret": "your-client-secret",
+        "authorizationEndpoint": "https://auth.example.com/authorize",
+        "tokenEndpoint": "https://auth.example.com/token",
+        "redirectUri": "http://localhost:3000/callback",
+        "scopes": ["read", "write"]
+      }
+    }
+  }
+}
