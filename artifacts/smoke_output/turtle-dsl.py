@@ -1,20 +1,24 @@
 """
 Turtle DSL
-==========
+===========
 
-Implements a LOGO-like toy language for Python’s turtle, with interpreter.
+Implements a LOGO-like toy language for Python's turtle, with interpreter.
+This example demonstrates parsing a small DSL using Lark and executing
+the resulting parse tree with Python's turtle graphics.
 """
 
+# Standard imports
+import turtle
+
+from lark import Lark, Transformer, v_args
+
+# Compatibility for Python 2 raw_input (if ever run under Py2)
 try:
     input = raw_input   # For Python2 compatibility
 except NameError:
     pass
 
-import turtle
-
-from lark import Lark, Transformer, v_args
-
-# Grammar definition (use r''' for multiline grammar strings)
+# Grammar definitions as constants
 TURTLE_GRAMMAR = r'''
     start: instruction+
 
@@ -36,20 +40,16 @@ TURTLE_GRAMMAR = r'''
 
 parser = Lark(TURTLE_GRAMMAR)
 
-# Transformer stub (present as an example; not applied to the parser below)
+# Transformer classes (placeholder for potential future use)
 @v_args(inline=True)
-class TurtleTransformer(Transformer):
-    # Example: keep tokens as-is; real transformations could convert NUMBER -> int, etc.
-    def NUMBER(self, token):
-        return token
-
-    def COLOR(self, token):
-        return token
+class NoopTransformer(Transformer):
+    pass
 
 
 def run_instruction(t):
     if t.data == 'change_color':
-        turtle.color(*t.children)   # We just pass the color names as-is
+        # Pass the color names as-is to turtle.color
+        turtle.color(*t.children)
 
     elif t.data == 'movement':
         name, number = t.children

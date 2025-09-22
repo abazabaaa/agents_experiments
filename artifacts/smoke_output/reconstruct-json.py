@@ -2,20 +2,22 @@
 Reconstruct a JSON
 ==================
 
-Demonstrates the experimental text-reconstruction feature
+Demonstrates the experimental text-reconstruction feature of Lark.
 
 The Reconstructor takes a parse tree (already filtered from punctuation, of course),
-and reconstructs it into correct text, that can be parsed correctly.
-It can be useful for creating "hooks" to alter data before handing it to other parsers. You can also use it to generate samples from scratch.
+and reconstructs it into correct text that can be parsed correctly.
+It can be useful for creating "hooks" to alter data before handing it to other
+parsers. You can also use it to generate samples from scratch.
 """
 
 import json
 
-from lark import Lark, Transformer, v_args
+from lark import Lark
 from lark.reconstruct import Reconstructor
 
 from _json_parser import json_grammar
 
+# Sample JSON used for the demonstration
 test_json = '''
     {
         "empty_object" : {},
@@ -29,6 +31,7 @@ test_json = '''
 
 
 def test_earley():
+    """Parse with the Earley parser and reconstruct the text from the tree."""
     json_parser = Lark(json_grammar, maybe_placeholders=False)
     tree = json_parser.parse(test_json)
 
@@ -38,6 +41,7 @@ def test_earley():
 
 
 def test_lalr():
+    """Parse with the LALR parser and reconstruct the text from the tree."""
     json_parser = Lark(json_grammar, parser='lalr', maybe_placeholders=False)
     tree = json_parser.parse(test_json)
 
