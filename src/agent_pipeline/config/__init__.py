@@ -368,6 +368,7 @@ class AgentSpec:
     attempt_overrides: Mapping[str, AttemptOverride] = field(default_factory=dict)
     input_guardrails: tuple[str, ...] = ()
     output_guardrails: tuple[str, ...] = ()
+    progress_timeout_seconds: float | None = None
 
     @classmethod
     def from_payload(
@@ -606,6 +607,23 @@ class AgentSpec:
         input_guardrails = _parse_guardrail_names("input_guardrails")
         output_guardrails = _parse_guardrail_names("output_guardrails")
 
+        progress_timeout_raw = payload.get("progress_timeout_seconds")
+        progress_timeout: float | None
+        if progress_timeout_raw is None:
+            progress_timeout = None
+        elif isinstance(progress_timeout_raw, (int, float)) and not isinstance(
+            progress_timeout_raw, bool
+        ):
+            progress_timeout = float(progress_timeout_raw)
+            if progress_timeout <= 0:
+                raise ValueError(
+                    f"agents.{key}.progress_timeout_seconds must be positive"
+                )
+        else:
+            raise TypeError(
+                f"agents.{key}.progress_timeout_seconds must be numeric if provided"
+            )
+
         return cls(
             key=key,
             name=str_or_default(payload.get("name"), key),
@@ -624,6 +642,7 @@ class AgentSpec:
             attempt_overrides=attempt_overrides,
             input_guardrails=input_guardrails,
             output_guardrails=output_guardrails,
+            progress_timeout_seconds=progress_timeout,
         )
 
 

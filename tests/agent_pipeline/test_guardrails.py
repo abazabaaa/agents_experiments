@@ -4,7 +4,6 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-
 from agent_pipeline.agents.guardrails import (
     INPUT_GUARDRAIL_REGISTRY,
     reject_empty_document,

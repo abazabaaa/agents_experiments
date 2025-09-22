@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from agent_pipeline.agents.runconfig import build_run_config, _prefer_new_items
+from agent_pipeline.agents.runconfig import _prefer_new_items, build_run_config
 
 
 def test_prefer_new_items_overrides_history() -> None:

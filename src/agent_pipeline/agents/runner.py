@@ -146,7 +146,15 @@ async def call_agent_streamed(
                     # Track progress and detect stuck patterns
                     turn_count = 0
                     last_progress_time = trio.current_time()
-                    progress_timeout = 30.0  # Alert if no progress for 30s
+                    metadata = getattr(context, "metadata", {}) or {}
+                    configured_timeout = metadata.get("progress_timeout_seconds")
+                    progress_timeout = (
+                        float(configured_timeout)
+                        if isinstance(configured_timeout, (int, float))
+                        and not isinstance(configured_timeout, bool)
+                        and configured_timeout > 0
+                        else 30.0
+                    )
 
                     async for event in result.stream_events():
                         current_time = trio.current_time()

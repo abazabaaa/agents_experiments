@@ -109,6 +109,9 @@ with clear logs make it easier to analyze complex agent interactions.
 - Each document workflow executes inside a single `trace(...)` context. All
   stage-level runs share the generated trace ID so telemetry and logs are tied
   together automatically.
+- Streaming agents can configure their progress watchdog via
+  `progress_timeout_seconds` in the JSON config, avoiding the previous hard-coded
+  30-second limit when monitoring `call_agent_streamed` pipelines.
 
 ## Trio / trio-asyncio Notes
 

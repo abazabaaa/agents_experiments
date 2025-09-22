@@ -64,7 +64,8 @@
       "instructions_path": "prompts/agents/smoke/router.md",
       "input_guardrails": [
         "reject_empty_document"
-      ]
+      ],
+      "progress_timeout_seconds": 120.0
     },
     "markdown_cleaner": {
       "name": "MarkdownPolisher",
@@ -74,7 +75,8 @@
       "timeout": 360.0,
       "max_tokens": 50000,
       "run_max_turns": 1,
-      "instructions_path": "prompts/agents/smoke/markdown_cleaner.md"
+      "instructions_path": "prompts/agents/smoke/markdown_cleaner.md",
+      "progress_timeout_seconds": 180.0
     },
     "notebook_refactor": {
       "name": "NotebookRefactorer",
@@ -84,7 +86,8 @@
       "timeout": 360.0,
       "max_tokens": 50000,
       "run_max_turns": 2,
-      "instructions_path": "prompts/agents/smoke/notebook_refactor.md"
+      "instructions_path": "prompts/agents/smoke/notebook_refactor.md",
+      "progress_timeout_seconds": 180.0
     },
     "reviewer": {
       "name": "QualityReviewer",
@@ -103,7 +106,8 @@
           }
         }
       },
-      "instructions_path": "prompts/agents/smoke/reviewer.md"
+      "instructions_path": "prompts/agents/smoke/reviewer.md",
+      "progress_timeout_seconds": 120.0
     },
     "namer": {
       "name": "FileNamer",
@@ -113,7 +117,8 @@
       "timeout": 120.0,
       "max_tokens": 1024,
       "run_max_turns": 1,
-      "instructions_path": "prompts/agents/smoke/namer.md"
+      "instructions_path": "prompts/agents/smoke/namer.md",
+      "progress_timeout_seconds": 60.0
     }
   }
 }

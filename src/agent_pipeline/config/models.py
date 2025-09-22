@@ -105,6 +105,7 @@ class AgentSpecModel(BaseModel):
     tools: list[Any] = Field(default_factory=list)
     input_guardrails: list[str] = Field(default_factory=list)
     output_guardrails: list[str] = Field(default_factory=list)
+    progress_timeout_seconds: float | int | None = None
 
     @field_validator("model_settings")
     @classmethod

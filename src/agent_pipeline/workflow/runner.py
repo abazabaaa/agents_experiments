@@ -409,6 +409,9 @@ class WorkflowRunner:
             attempt_metadata = dict(metadata)
             attempt_metadata["stage"] = stage
             attempt_metadata["attempt"] = attempt_index
+            attempt_metadata["progress_timeout_seconds"] = (
+                stage_spec.progress_timeout_seconds
+            )
             context = AgentCallContext(
                 logger=self._logger,
                 workflow_name=self._config.workflow_name,
