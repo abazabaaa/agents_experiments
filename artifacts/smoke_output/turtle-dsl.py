@@ -1,13 +1,10 @@
 """
 Turtle DSL
-===========
+==========
 
-Implements a LOGO-like toy language for Python's turtle, with an interpreter.
-This example uses Lark to parse a small DSL and then drives the turtle
-module accordingly.
+Implements a LOGO-like toy language for Python’s turtle, with interpreter.
 """
 
-# Standard imports
 try:
     input = raw_input   # For Python2 compatibility
 except NameError:
@@ -17,8 +14,8 @@ import turtle
 
 from lark import Lark, Transformer, v_args
 
-# Grammar definition (must use raw triple-single-quotes for multiline grammars)
-turtle_grammar = r'''
+# Grammar definition (use r''' for multiline grammar strings)
+TURTLE_GRAMMAR = r'''
     start: instruction+
 
     instruction: MOVEMENT NUMBER            -> movement
@@ -37,12 +34,17 @@ turtle_grammar = r'''
     %ignore WS
 '''
 
-parser = Lark(turtle_grammar)
+parser = Lark(TURTLE_GRAMMAR)
 
-# Transformer placeholder (not used by the rest of the example, provided for structure)
+# Transformer stub (present as an example; not applied to the parser below)
 @v_args(inline=True)
-class _PlaceholderTransformer(Transformer):
-    pass
+class TurtleTransformer(Transformer):
+    # Example: keep tokens as-is; real transformations could convert NUMBER -> int, etc.
+    def NUMBER(self, token):
+        return token
+
+    def COLOR(self, token):
+        return token
 
 
 def run_instruction(t):

@@ -10,6 +10,7 @@ from agents.model_settings import ModelSettings
 from openai.types.shared import Reasoning
 
 from ..config import AgentSpec, PipelineConfig
+from .guardrails import resolve_input_guardrails, resolve_output_guardrails
 
 
 class AgentRegistry:
@@ -70,20 +71,29 @@ class AgentRegistry:
                     )
                 )
 
-        agent = Agent(
-            name=spec.name,
-            instructions=spec.instructions,
-            model=spec.model,
-            model_settings=model_settings,
-            output_type=output_type,
-            tools=(tools or []) + tool_defs,
-            mcp_servers=mcp_servers or [],
-            tool_use_behavior=(spec.tool_use_behavior or "run_llm_again"),
-            reset_tool_choice=(
+        input_guardrails = resolve_input_guardrails(spec.input_guardrails)
+        output_guardrails = resolve_output_guardrails(spec.output_guardrails)
+
+        agent_kwargs: dict[str, Any] = {
+            "name": spec.name,
+            "instructions": spec.instructions,
+            "model": spec.model,
+            "model_settings": model_settings,
+            "output_type": output_type,
+            "tools": (tools or []) + tool_defs,
+            "mcp_servers": mcp_servers or [],
+            "tool_use_behavior": spec.tool_use_behavior or "run_llm_again",
+            "reset_tool_choice": (
                 spec.reset_tool_choice if spec.reset_tool_choice is not None else True
             ),
-            handoffs=handoff_agents,
-        )
+            "handoffs": handoff_agents,
+        }
+        if input_guardrails:
+            agent_kwargs["input_guardrails"] = input_guardrails
+        if output_guardrails:
+            agent_kwargs["output_guardrails"] = output_guardrails
+
+        agent = Agent(**agent_kwargs)
         self._cache[key] = agent
         return agent
 

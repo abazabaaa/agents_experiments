@@ -103,6 +103,9 @@ class AgentSpecModel(BaseModel):
     attempt_overrides: dict[str, AttemptOverrideModel] = Field(default_factory=dict)
     handoffs: list[str] = Field(default_factory=list)
     tools: list[Any] = Field(default_factory=list)
+    input_guardrails: list[str] = Field(default_factory=list)
+    output_guardrails: list[str] = Field(default_factory=list)
+    progress_timeout_seconds: float | int | None = None
 
     @field_validator("model_settings")
     @classmethod

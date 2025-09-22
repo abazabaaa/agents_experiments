@@ -98,6 +98,21 @@ unexpected agent behaviour.
 Contributions should follow the existing patterns—small, well-tested changes
 with clear logs make it easier to analyze complex agent interactions.
 
+### Guardrails, Sessions, and Tracing
+
+- Agent specs now accept `input_guardrails` and `output_guardrails` arrays. The
+  `configs/smoke_gpt5_nano.json` sample applies the
+  `reject_empty_document` guardrail defined in
+  `src/agent_pipeline/agents/guardrails.py` to the router stage.
+- Conversation state is managed via `SQLiteSession`; the pipeline no longer
+  relies on `RunResult.to_input_list()` to shuttle context between stages.
+- Each document workflow executes inside a single `trace(...)` context. All
+  stage-level runs share the generated trace ID so telemetry and logs are tied
+  together automatically.
+- Streaming agents can configure their progress watchdog via
+  `progress_timeout_seconds` in the JSON config, avoiding the previous hard-coded
+  30-second limit when monitoring `call_agent_streamed` pipelines.
+
 ## Trio / trio-asyncio Notes
 
 Working inside Trio with embedded asyncio loops surfaced a few important lessons. Future changes should keep these in mind:

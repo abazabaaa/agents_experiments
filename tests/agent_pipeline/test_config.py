@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from agent_pipeline.config import load_config
 
 
@@ -70,3 +71,50 @@ def test_load_config_with_stage_buffers(tmp_path: Path) -> None:
     router_spec = config.agent_specs["router"]
     assert router_spec.model == "gpt-5-nano"
     assert router_spec.timeout is None
+    assert router_spec.progress_timeout_seconds is None
+
+
+def test_load_config_progress_timeout(tmp_path: Path) -> None:
+    payload = {
+        "logging": {},
+        "io": {},
+        "concurrency": {},
+        "retry": {},
+        "httpx": {},
+        "agents": {
+            "streamer": {
+                "name": "Streamer",
+                "instructions": "Stream content",
+                "model": "gpt-5-nano",
+                "progress_timeout_seconds": 200,
+            }
+        },
+    }
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    config = load_config(config_path)
+    assert config.agent_specs["streamer"].progress_timeout_seconds == 200.0
+
+
+def test_load_config_invalid_progress_timeout(tmp_path: Path) -> None:
+    payload = {
+        "logging": {},
+        "io": {},
+        "concurrency": {},
+        "retry": {},
+        "httpx": {},
+        "agents": {
+            "streamer": {
+                "name": "Streamer",
+                "instructions": "Stream content",
+                "model": "gpt-5-nano",
+                "progress_timeout_seconds": 0,
+            }
+        },
+    }
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        load_config(config_path)

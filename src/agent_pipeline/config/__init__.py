@@ -366,6 +366,9 @@ class AgentSpec:
     reset_tool_choice: bool | None = None
     # Optional per-attempt overrides (e.g., a "repair" attempt for JSON failures)
     attempt_overrides: Mapping[str, AttemptOverride] = field(default_factory=dict)
+    input_guardrails: tuple[str, ...] = ()
+    output_guardrails: tuple[str, ...] = ()
+    progress_timeout_seconds: float | None = None
 
     @classmethod
     def from_payload(
@@ -589,6 +592,38 @@ class AgentSpec:
         else:
             raise TypeError(f"agents.{key}.tools must be a list when provided")
 
+        def _parse_guardrail_names(field_name: str) -> tuple[str, ...]:
+            guardrail_raw = payload.get(field_name)
+            if guardrail_raw is None:
+                return ()
+            if isinstance(guardrail_raw, list) and all(
+                isinstance(entry, str) for entry in guardrail_raw
+            ):
+                return tuple(str(entry) for entry in guardrail_raw)
+            raise TypeError(
+                f"agents.{key}.{field_name} must be a list of strings if provided"
+            )
+
+        input_guardrails = _parse_guardrail_names("input_guardrails")
+        output_guardrails = _parse_guardrail_names("output_guardrails")
+
+        progress_timeout_raw = payload.get("progress_timeout_seconds")
+        progress_timeout: float | None
+        if progress_timeout_raw is None:
+            progress_timeout = None
+        elif isinstance(progress_timeout_raw, (int, float)) and not isinstance(
+            progress_timeout_raw, bool
+        ):
+            progress_timeout = float(progress_timeout_raw)
+            if progress_timeout <= 0:
+                raise ValueError(
+                    f"agents.{key}.progress_timeout_seconds must be positive"
+                )
+        else:
+            raise TypeError(
+                f"agents.{key}.progress_timeout_seconds must be numeric if provided"
+            )
+
         return cls(
             key=key,
             name=str_or_default(payload.get("name"), key),
@@ -605,6 +640,9 @@ class AgentSpec:
             tool_use_behavior=tool_use_behavior_out,
             reset_tool_choice=reset_tool_choice_out,
             attempt_overrides=attempt_overrides,
+            input_guardrails=input_guardrails,
+            output_guardrails=output_guardrails,
+            progress_timeout_seconds=progress_timeout,
         )
 
 
