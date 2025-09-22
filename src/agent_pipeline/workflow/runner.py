@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Literal
+from uuid import uuid4
 
-from agents import ItemHelpers
+import trio_asyncio
+from agents import ItemHelpers, trace
 from agents.items import (
     MessageOutputItem,
     ReasoningItem,
     ToolCallItem,
     ToolCallOutputItem,
 )
+from agents.memory import SQLiteSession
 from agents.result import RunResult
 from pydantic import BaseModel
 
@@ -76,12 +79,22 @@ class WorkflowRunner:
         doc: DocTask,
     ) -> WorkflowArtifacts:
         """Run the multi-stage workflow for ``doc`` and return collected artifacts."""
+        workflow_name = self._config.workflow_name or "document-workflow"
+        trace_id = f"trace_{uuid4().hex}"
+        group_id = f"doc-{doc.doc_id}"
+        trace_metadata = {"doc_url": doc.url}
 
-        if "orchestrator" in self._config.agent_specs:
-            return await self._run_with_orchestrator(doc)
-        return await self._run_manual(doc)
+        with trace(
+            workflow_name,
+            trace_id=trace_id,
+            group_id=group_id,
+            metadata=trace_metadata,
+        ):
+            if "orchestrator" in self._config.agent_specs:
+                return await self._run_with_orchestrator(doc, trace_id=trace_id)
+            return await self._run_manual(doc, trace_id=trace_id)
 
-    async def _run_with_orchestrator(self, doc: DocTask) -> WorkflowArtifacts:
+    async def _run_with_orchestrator(self, doc: DocTask, *, trace_id: str) -> WorkflowArtifacts:
         # Ensure dependent agents exist before constructing orchestrator handoffs.
         self._registry.get_agent("router", output_type=RoutingDecision)
         self._registry.get_agent("markdown_cleaner", output_type=MarkdownCleanResult)
@@ -90,10 +103,6 @@ class WorkflowRunner:
         )
         self._registry.get_agent("reviewer", output_type=ReviewResult)
         self._registry.get_agent("namer", output_type=NamingResult)
-
-        orchestrator_agent = self._registry.get_agent(
-            "orchestrator", output_type=WorkflowOutput
-        )
 
         orchestrator_spec = self._config.agent_specs["orchestrator"]
         tool_descriptions = []
@@ -120,7 +129,7 @@ class WorkflowRunner:
             f"{doc.content}\n"
             "--- End Document ---"
         )
-        conversation = builder.build()
+        initial_messages = builder.build()
 
         metadata = {
             "stage": "workflow",
@@ -128,24 +137,18 @@ class WorkflowRunner:
             "rework_enabled": self._config.rework_enabled,
             "rework_max_cycles": self._config.rework_max_cycles,
         }
-        context = AgentCallContext(
-            logger=self._logger,
-            workflow_name=self._config.workflow_name,
+        session = self._create_session(doc.doc_id, "orchestrator")
+        stage_result = await self._run_stage(
+            agent_key="orchestrator",
             stage="workflow",
-            run_id=f"orchestrator-{doc.doc_id}",
-            doc_url=doc.url,
+            doc=doc,
+            input_items=initial_messages,
             metadata=metadata,
+            output_type=WorkflowOutput,
+            session=session,
+            trace_id=trace_id,
         )
-        run_config = build_run_config(self._config, context)
-        run_result = await call_agent(
-            orchestrator_agent,
-            conversation,
-            context=context,
-            run_config=run_config,
-            limiter_pool=self._limiter_pool,
-            timeout=self._config.agent_specs["orchestrator"].timeout,
-            run_max_turns=self._config.agent_specs["orchestrator"].run_max_turns,
-        )
+        run_result = stage_result.run_result
 
         final_output: WorkflowOutput = run_result.final_output
         trajectory = self._serialize_run_items(run_result)
@@ -176,7 +179,7 @@ class WorkflowRunner:
             final_output=final_output_dict,
         )
 
-    async def _run_manual(self, doc: DocTask) -> WorkflowArtifacts:
+    async def _run_manual(self, doc: DocTask, *, trace_id: str) -> WorkflowArtifacts:
         base_metadata = dict(doc.metadata)
         base_metadata.setdefault("doc_url", doc.url)
 
@@ -189,8 +192,9 @@ class WorkflowRunner:
             input_items=conversation,
             metadata=base_metadata,
             output_type=RoutingDecision,
+            trace_id=trace_id,
         )
-        conversation = router_result.run_result.to_input_list()
+        conversation = await self._get_session_items(router_result.session)
         route = router_result.output.route
 
         processed_text: str | None = None
@@ -215,8 +219,9 @@ class WorkflowRunner:
                     if route == "markdown"
                     else NotebookRefactorResult
                 ),
+                trace_id=trace_id,
             )
-            conversation = work_result.run_result.to_input_list()
+            conversation = await self._get_session_items(work_result.session)
             if route == "markdown":
                 processed_text = work_result.output.cleaned_markdown
                 summary = work_result.output.summary
@@ -231,14 +236,16 @@ class WorkflowRunner:
                 input_items=conversation,
                 metadata=base_metadata,
                 output_type=ReviewResult,
+                trace_id=trace_id,
             )
-            conversation = review.run_result.to_input_list()
+            conversation = await self._get_session_items(review.session)
             review_result = review.output
             if review_result.approved:
                 break
 
-            if not self._config.rework_enabled or (
-                rework_cycles >= self._config.rework_max_cycles
+            if (
+                not self._config.rework_enabled
+                or rework_cycles >= self._config.rework_max_cycles
             ):
                 raise WorkflowError(
                     "Review rejected document and rework is disabled or exceeded maximum cycles"
@@ -258,8 +265,9 @@ class WorkflowRunner:
                     input_items=conversation,
                     metadata=base_metadata,
                     output_type=RoutingDecision,
+                    trace_id=trace_id,
                 )
-                conversation = router_retry.run_result.to_input_list()
+                conversation = await self._get_session_items(router_retry.session)
                 route = router_retry.output.route
             elif target in {"markdown", "notebook"}:
                 route = target
@@ -277,6 +285,7 @@ class WorkflowRunner:
             input_items=conversation,
             metadata=base_metadata,
             output_type=NamingResult,
+            trace_id=trace_id,
         )
 
         naming_output = naming.output
@@ -367,6 +376,19 @@ class WorkflowRunner:
         )
         return builder.build()
 
+    @staticmethod
+    def _create_session(doc_id: int, agent_key: str) -> SQLiteSession:
+        """Return a session keyed to the document/stage pair."""
+
+        session_id = f"doc-{doc_id}-{agent_key}"
+        return SQLiteSession(session_id)
+
+    @staticmethod
+    async def _get_session_items(session: SQLiteSession) -> list[dict[str, Any]]:
+        """Bridge session history access from asyncio into Trio."""
+
+        return await trio_asyncio.aio_as_trio(session.get_items)()
+
     async def _run_stage(
         self,
         *,
@@ -376,9 +398,12 @@ class WorkflowRunner:
         input_items: AgentInput,
         metadata: dict[str, Any],
         output_type: Any,
+        session: SQLiteSession | None = None,
+        trace_id: str | None = None,
     ) -> StageRunResult:
         stage_spec = self._config.agent_specs[agent_key]
         agent = self._registry.get_agent(agent_key, output_type=output_type)
+        session = session or self._create_session(doc.doc_id, agent_key)
 
         async def attempt(attempt_index: int) -> RunResult[Any]:
             attempt_metadata = dict(metadata)
@@ -391,7 +416,7 @@ class WorkflowRunner:
                 run_id=f"{agent_key}-{doc.doc_id}-try{attempt_index}",
                 doc_url=doc.url,
                 metadata=attempt_metadata,
-                trace_id=None,
+                trace_id=trace_id,
             )
             run_config = build_run_config(self._config, context)
             run_result: RunResult[Any] = await call_agent(
@@ -402,6 +427,7 @@ class WorkflowRunner:
                 limiter_pool=self._limiter_pool,
                 timeout=stage_spec.timeout,
                 run_max_turns=stage_spec.run_max_turns,
+                session=session,
             )
             return run_result
 
@@ -415,6 +441,7 @@ class WorkflowRunner:
         return StageRunResult(
             run_result=run_result,
             output=run_result.final_output,
+            session=session,
         )
 
     @staticmethod
@@ -433,3 +460,4 @@ class WorkflowRunner:
 class StageRunResult:
     run_result: RunResult[Any]
     output: Any
+    session: SQLiteSession

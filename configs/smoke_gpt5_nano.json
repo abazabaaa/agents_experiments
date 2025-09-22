@@ -61,7 +61,10 @@
       "timeout": 240.0,
       "max_tokens": 1024,
       "run_max_turns": 1,
-      "instructions_path": "prompts/agents/smoke/router.md"
+      "instructions_path": "prompts/agents/smoke/router.md",
+      "input_guardrails": [
+        "reject_empty_document"
+      ]
     },
     "markdown_cleaner": {
       "name": "MarkdownPolisher",
